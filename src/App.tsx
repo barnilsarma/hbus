@@ -8,6 +8,7 @@ function App() {
         <Routes>
           <Route path="/" element={<pages.Home />} />
           <Route path="/register" element={<pages.Register />} />
+          <Route path="/users" element={<pages.Users />} />
         </Routes>
       </Router>
     </>
