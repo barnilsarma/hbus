@@ -11,6 +11,13 @@ type User = {
   role?: string;
 };
 
+type AccessState = {
+  view: boolean;
+  edit: boolean;
+  department: string;
+};
+
+const departments = ['PURCHASE ORDER'];
 const validRoles = ['A', 'B', 'C', 'D'] as const;
 
 const Users = () => {
@@ -19,30 +26,41 @@ const Users = () => {
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accessMap, setAccessMap] = useState<Record<string, AccessState>>({});
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+  const [selectedAccess, setSelectedAccess] = useState<{ view: boolean; edit: boolean }>({ view: false, edit: false });
 
   useEffect(() => {
     const role = localStorage.getItem('hbus_user_role');
     const userId = localStorage.getItem('hbus_user_id');
 
-    if (!role || !['A', 'B', 'C'].includes(role)) {
+    if (!role || !['A', 'B'].includes(role)) {
       navigate('/');
       return;
     }
 
     setCurrentRole(role);
     setCurrentUserId(userId);
-    loadUsers(role);
+    loadUsers(role, userId);
   }, [navigate]);
 
-  const loadUsers = async (role: string) => {
+  const getUserId = (user: User) => user.userId ?? user._id ?? user.email ?? '';
+
+  const loadUsers = async (role: string, userId: string | null) => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
       const allUsers: User[] = response.data;
-      const filtered = role === 'A'
-        ? allUsers
-        : role === 'B'
-          ? allUsers.filter((user) => ['B', 'C', 'D'].includes(user.role ?? ''))
-          : allUsers.filter((user) => ['C', 'D'].includes(user.role ?? ''));
+      const filtered = allUsers.filter((user) => {
+        const id = getUserId(user);
+        if (role === 'A') {
+          return id !== userId;
+        }
+        if (role === 'B') {
+          return user.role !== 'A';
+        }
+        return false;
+      });
       setUsers(filtered);
       setError(null);
     } catch (err) {
@@ -51,16 +69,57 @@ const Users = () => {
     }
   };
 
+  const getAccessKey = (user: User, department: string) => `${getUserId(user)}:${department}`;
+
+  const getStoredAccess = (user: User, department: string) => {
+    return accessMap[getAccessKey(user, department)] ?? null;
+  };
+
+  const openAccessModal = (user: User, department: string) => {
+    const stored = getStoredAccess(user, department);
+    const defaultAccess = user.role === 'C'
+      ? { view: true, edit: true }
+      : { view: false, edit: false };
+
+    const initialAccess = stored ? { view: stored.view, edit: stored.edit } : defaultAccess;
+    if (initialAccess.edit && !initialAccess.view) {
+      initialAccess.view = true;
+    }
+
+    setSelectedUser(user);
+    setSelectedDepartment(department);
+    setSelectedAccess(initialAccess);
+  };
+
+  const closeModal = () => {
+    setSelectedUser(null);
+    setSelectedDepartment('');
+    setSelectedAccess({ view: false, edit: false });
+  };
+
+  const saveAccess = () => {
+    if (!selectedUser || !selectedDepartment) {
+      return;
+    }
+
+    const key = getAccessKey(selectedUser, selectedDepartment);
+    setAccessMap((prev) => ({
+      ...prev,
+      [key]: {
+        department: selectedDepartment,
+        view: selectedAccess.view,
+        edit: selectedAccess.edit,
+      },
+    }));
+    closeModal();
+  };
+
   const canChangeRole = (target: User) => {
     if (!currentRole) {
       return false;
     }
 
-    if (target.userId && target.userId === currentUserId) {
-      return false;
-    }
-
-    if (target._id && target._id === currentUserId) {
+    if (getUserId(target) === currentUserId) {
       return false;
     }
 
@@ -72,10 +131,6 @@ const Users = () => {
       return ['C', 'D'].includes(target.role ?? '');
     }
 
-    if (currentRole === 'C') {
-      return target.role === 'D';
-    }
-
     return false;
   };
 
@@ -84,34 +139,38 @@ const Users = () => {
       return [];
     }
 
-    if (currentRole === 'A') {
-      return validRoles;
-    }
-
-    if (currentRole === 'B') {
+    if (currentRole === 'A' || currentRole === 'B') {
       return ['B', 'C', 'D'];
-    }
-
-    if (currentRole === 'C') {
-      return ['C', 'D'];
     }
 
     return [];
   };
 
   const handleRoleChange = async (user: User, newRole: string) => {
-    const id = user.userId ?? user._id;
+    const id = getUserId(user);
     if (!id || !currentRole || !canChangeRole(user)) {
       return;
     }
 
     try {
-      await axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${id}`, { role: newRole });
-      await loadUsers(currentRole);
+      await axios.put(`${import.meta.env.VITE_APP_API}/api/users/${id}`, { role: newRole });
+      await loadUsers(currentRole, currentUserId);
     } catch (err) {
       console.error(err);
       setError('Role update failed.');
     }
+  };
+
+  const getAccessSummary = (user: User) => {
+    const department = departments[0];
+    const access = getStoredAccess(user, department);
+    if (!access) {
+      return 'Department not assigned';
+    }
+    const granted = [];
+    if (access.view) granted.push('VIEW');
+    if (access.edit) granted.push('EDIT');
+    return granted.length > 0 ? `${department}: ${granted.join(', ')}` : `${department}: No access`;
   };
 
   return (
@@ -119,7 +178,7 @@ const Users = () => {
       <section className={styles.card}>
         <div className={styles.header}>
           <h1>User Management</h1>
-          <p>Manage user roles based on your current access level.</p>
+          <p>Manage user roles and department access for C/D users.</p>
         </div>
 
         {error && <div className={styles.error}>{error}</div>}
@@ -131,18 +190,19 @@ const Users = () => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Department Access</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user) => {
                 const role = user.role ?? 'D';
-                const userKey = user.userId ?? user._id ?? user.email ?? Math.random().toString();
+                const userKey = getUserId(user) || Math.random().toString();
+                const isRestrictedUser = ['C', 'D'].includes(role);
                 return (
                   <tr key={userKey}>
                     <td>{user.name ?? 'Unknown'}</td>
                     <td>{user.email ?? 'Unknown'}</td>
-                    <td>{role}</td>
                     <td>
                       {canChangeRole(user) ? (
                         <select
@@ -157,6 +217,25 @@ const Users = () => {
                           ))}
                         </select>
                       ) : (
+                        role
+                      )}
+                    </td>
+                    <td>{isRestrictedUser ? getAccessSummary(user) : 'Full access'}</td>
+                    <td>
+                      {isRestrictedUser && currentRole ? (
+                        <select
+                          value=""
+                          onChange={(event) => openAccessModal(user, event.target.value)}
+                          className={styles.roleSelect}
+                        >
+                          <option value="">Select department</option>
+                          {departments.map((department) => (
+                            <option key={department} value={department}>
+                              {department}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
                         <span className={styles.noAction}>No action</span>
                       )}
                     </td>
@@ -167,6 +246,59 @@ const Users = () => {
           </table>
         </div>
       </section>
+
+      {selectedUser && (
+        <div className={styles.modalBackdrop}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h2>Access</h2>
+                <p>
+                  Manage access for {selectedUser.name ?? selectedUser.email} in {selectedDepartment}
+                </p>
+              </div>
+              <button type="button" className={styles.closeButton} onClick={closeModal}>
+                ×
+              </button>
+            </div>
+
+            <div className={styles.checkboxGroup}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={selectedAccess.view}
+                  disabled={selectedAccess.edit}
+                  onChange={(event) => setSelectedAccess((prev) => ({ ...prev, view: event.target.checked }))}
+                />
+                View
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={selectedAccess.edit}
+                  onChange={(event) => {
+                    const editChecked = event.target.checked;
+                    setSelectedAccess((prev) => ({
+                      view: editChecked ? true : prev.view,
+                      edit: editChecked,
+                    }));
+                  }}
+                />
+                Edit
+              </label>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.secondaryButton} onClick={closeModal}>
+                Cancel
+              </button>
+              <button type="button" className={styles.primaryButton} onClick={saveAccess}>
+                Save access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

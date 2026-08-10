@@ -58,6 +58,97 @@
     border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   }
 
+  .modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    display: grid;
+    place-items: center;
+    z-index: 10;
+  }
+
+  .modal {
+    width: min(100%, 420px);
+    background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 38px 80px rgba(15, 23, 42, 0.35);
+  }
+
+  .modalHeader {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+
+  .modalHeader h2 {
+    margin: 0 0 8px;
+    font-size: 1.5rem;
+    color: #f8fafc;
+  }
+
+  .modalHeader p {
+    margin: 0;
+    color: #cbd5e1;
+    line-height: 1.4;
+  }
+
+  .closeButton {
+    border: none;
+    background: transparent;
+    color: #f8fafc;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+
+  .checkboxGroup {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .checkboxGroup label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #e2e8f0;
+    font-size: 0.95rem;
+  }
+
+  .checkboxGroup input {
+    width: 18px;
+    height: 18px;
+    accent-color: #38bdf8;
+  }
+
+  .modalActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .secondaryButton,
+  .primaryButton {
+    padding: 12px 18px;
+    border-radius: 14px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .secondaryButton {
+    background: rgba(148, 163, 184, 0.12);
+    color: #e2e8f0;
+  }
+
+  .primaryButton {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
   th {
     color: #94a3b8;
     font-size: 0.95rem;
