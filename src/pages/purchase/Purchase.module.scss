@@ -1,0 +1,179 @@
+.purchase {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+  background: #090b12;
+  color: #eef2ff;
+}
+
+.card {
+  width: min(100%, 1100px);
+  padding: 28px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 16, 35, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 32px 90px rgba(7, 15, 29, 0.4);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.createButton,
+.backButton,
+.cellEdit,
+.secondaryButton,
+.primaryButton {
+  border: none;
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.createButton,
+.primaryButton {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.backButton,
+.secondaryButton {
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+}
+
+.error {
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(220, 38, 38, 0.1);
+  color: #fecaca;
+  margin-bottom: 20px;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+th,
+td {
+  padding: 16px 18px;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+th {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+td {
+  color: #e2e8f0;
+  position: relative;
+}
+
+.cellValue {
+  display: block;
+}
+
+.cellEdit {
+  margin-top: 8px;
+  display: inline-flex;
+  gap: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  display: grid;
+  place-items: center;
+  z-index: 10;
+}
+
+.modal {
+  width: min(100%, 560px);
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 38px 80px rgba(15, 23, 42, 0.35);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #f8fafc;
+}
+
+.closeButton {
+  border: none;
+  background: transparent;
+  color: #f8fafc;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: #cbd5e1;
+}
+
+.field input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #111827;
+  color: #f8fafc;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.empty {
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+  text-align: center;
+}

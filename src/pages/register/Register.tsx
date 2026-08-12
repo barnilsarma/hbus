@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import styles from './Register.module.scss';
 
 interface LocationState {
@@ -23,15 +24,31 @@ const Register = () => {
     const email = formData.get('email')?.toString() ?? '';
 
     try {
-      const response = await axios.post(`${import.meta.env.VITE_APP_API}/api/users`, { name, email });
+      await toast.promise(
+        (async () => {
+          const response = await axios.post(`${import.meta.env.VITE_APP_API}/api/users`, { name, email });
 
-      if (response.status >= 200 && response.status < 300) {
-        navigate('/');
-      } else {
-        console.error('Register failed:', response.statusText);
-      }
-    } catch (error) {
-      console.error('Register submit error:', error);
+          if (response.status >= 200 && response.status < 300) {
+            const role = response.data?.role ?? 'D';
+            const userId = response.data?.userId ?? response.data?._id ?? '';
+            localStorage.setItem('hbus_user_logged_in', 'true');
+            localStorage.setItem('hbus_user_email', email);
+            localStorage.setItem('hbus_user_role', role);
+            localStorage.setItem('hbus_user_id', userId);
+            navigate('/');
+            return;
+          }
+
+          throw new Error(response.statusText || 'Register failed.');
+        })(),
+        {
+          loading: 'Creating account...',
+          success: 'Account created.',
+          error: 'Registration failed.',
+        },
+      );
+    } catch {
+      // Error shown via toast.promise.
     }
   };
 
@@ -68,7 +85,7 @@ const Register = () => {
             />
           </div>
 
-          <button className={styles.submitButton} type="submit">
+          <button className={styles.submitButton} type="submit" >
             Create account
           </button>
         </form>
