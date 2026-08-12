@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import styles from './Users.module.scss';
 
 type User = {
@@ -10,8 +11,6 @@ type User = {
   email?: string;
   role?: string;
 };
-
-const validRoles = ['A', 'B', 'C', 'D'] as const;
 
 const Users = () => {
   const navigate = useNavigate();
@@ -24,29 +23,44 @@ const Users = () => {
     const role = localStorage.getItem('hbus_user_role');
     const userId = localStorage.getItem('hbus_user_id');
 
-    if (!role || !['A', 'B', 'C'].includes(role)) {
+    if (!role || !['A', 'B'].includes(role)) {
       navigate('/');
       return;
     }
 
     setCurrentRole(role);
     setCurrentUserId(userId);
-    loadUsers(role);
+    loadUsers(role, userId!);
   }, [navigate]);
 
-  const loadUsers = async (role: string) => {
+  const getUserId = (user: User) => user.userId ?? user._id ?? '';
+
+  const loadUsers = async (role: string, userId: string) => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
-      const allUsers: User[] = response.data;
-      const filtered = role === 'A'
-        ? allUsers
-        : role === 'B'
-          ? allUsers.filter((user) => ['B', 'C', 'D'].includes(user.role ?? ''))
-          : allUsers.filter((user) => ['C', 'D'].includes(user.role ?? ''));
-      setUsers(filtered);
-      setError(null);
-    } catch (err) {
-      console.error(err);
+      await toast.promise(
+        (async () => {
+          const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
+          const allUsers: User[] = response.data;
+          const filtered = allUsers.filter((user) => {
+            const id = getUserId(user);
+            if (role === 'A') {
+              return id !== userId;
+            }
+            if (role === 'B') {
+              return user.role !== 'A';
+            }
+            return false;
+          });
+          setUsers(filtered);
+          setError(null);
+        })(),
+        {
+          loading: 'Loading users...',
+          success: 'Users loaded.',
+          error: 'Failed to load users.',
+        },
+      );
+    } catch {
       setError('Failed to load users.');
     }
   };
@@ -56,11 +70,7 @@ const Users = () => {
       return false;
     }
 
-    if (target.userId && target.userId === currentUserId) {
-      return false;
-    }
-
-    if (target._id && target._id === currentUserId) {
+    if (getUserId(target) === currentUserId) {
       return false;
     }
 
@@ -72,44 +82,42 @@ const Users = () => {
       return ['C', 'D'].includes(target.role ?? '');
     }
 
-    if (currentRole === 'C') {
-      return target.role === 'D';
-    }
-
     return false;
   };
 
-  const allowedRoleOptions = (target: User) => {
+  const allowedRoleOptions = (_target: User) => {
     if (!currentRole) {
       return [];
     }
 
-    if (currentRole === 'A') {
-      return validRoles;
-    }
-
-    if (currentRole === 'B') {
+    if (currentRole === 'A' || currentRole === 'B') {
       return ['B', 'C', 'D'];
-    }
-
-    if (currentRole === 'C') {
-      return ['C', 'D'];
     }
 
     return [];
   };
 
   const handleRoleChange = async (user: User, newRole: string) => {
-    const id = user.userId ?? user._id;
+    const id = getUserId(user);
     if (!id || !currentRole || !canChangeRole(user)) {
       return;
     }
 
     try {
-      await axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${id}`, { role: newRole });
-      await loadUsers(currentRole);
-    } catch (err) {
-      console.error(err);
+      await toast.promise(
+        (async () => {
+          await axios.put(`${import.meta.env.VITE_APP_API}/api/users/${id}`, { role: newRole });
+          if (currentRole && currentUserId) {
+            await loadUsers(currentRole, currentUserId);
+          }
+        })(),
+        {
+          loading: 'Updating role...',
+          success: 'Role updated.',
+          error: 'Role update failed.',
+        },
+      );
+    } catch {
       setError('Role update failed.');
     }
   };
@@ -119,7 +127,7 @@ const Users = () => {
       <section className={styles.card}>
         <div className={styles.header}>
           <h1>User Management</h1>
-          <p>Manage user roles based on your current access level.</p>
+          <p>Manage user roles and department access for C/D users.</p>
         </div>
 
         {error && <div className={styles.error}>{error}</div>}
@@ -129,42 +137,40 @@ const Users = () => {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Actions</th>
+            <th>Email</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((user) => {
+            const role = user.role ?? 'D';
+            const userKey = getUserId(user) || Math.random().toString();
+            return (
+              <tr key={userKey}>
+                <td>{user.name ?? 'Unknown'}</td>
+                <td>{user.email ?? 'Unknown'}</td>
+                <td>
+                  {canChangeRole(user) ? (
+                    <select
+                      value={role}
+                      onChange={(event) => handleRoleChange(user, event.target.value)}
+                      className={styles.roleSelect}
+                    >
+                      {allowedRoleOptions(user).map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    role
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => {
-                const role = user.role ?? 'D';
-                const userKey = user.userId ?? user._id ?? user.email ?? Math.random().toString();
-                return (
-                  <tr key={userKey}>
-                    <td>{user.name ?? 'Unknown'}</td>
-                    <td>{user.email ?? 'Unknown'}</td>
-                    <td>{role}</td>
-                    <td>
-                      {canChangeRole(user) ? (
-                        <select
-                          value={role}
-                          onChange={(event) => handleRoleChange(user, event.target.value)}
-                          className={styles.roleSelect}
-                        >
-                          {allowedRoleOptions(user).map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={styles.noAction}>No action</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            );
+          })}
+        </tbody>
+      </table>
         </div>
       </section>
     </main>

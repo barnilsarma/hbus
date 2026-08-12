@@ -1,23 +1,14 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import styles from './Home.module.scss';
 import { signInWithGoogle, signOutGoogle } from '../../firebase.ts';
 
 const Home = () => {
     const navigate = useNavigate();
     const [loggedIn, setLoggedIn] = useState(false);
-    const [userEmail, setUserEmail] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<string | null>(null);
-
-    useEffect(() => {
-        const storedLoggedIn = localStorage.getItem('hbus_user_logged_in') === 'true';
-        const storedEmail = localStorage.getItem('hbus_user_email');
-        const storedRole = localStorage.getItem('hbus_user_role');
-        setLoggedIn(storedLoggedIn);
-        setUserEmail(storedEmail);
-        setUserRole(storedRole);
-    }, []);
 
     const setLoginState = (email: string, role: string, userId: string) => {
         localStorage.setItem('hbus_user_logged_in', 'true');
@@ -25,7 +16,6 @@ const Home = () => {
         localStorage.setItem('hbus_user_role', role);
         localStorage.setItem('hbus_user_id', userId);
         setLoggedIn(true);
-        setUserEmail(email);
         setUserRole(role);
     };
 
@@ -35,60 +25,106 @@ const Home = () => {
         localStorage.removeItem('hbus_user_role');
         localStorage.removeItem('hbus_user_id');
         setLoggedIn(false);
-        setUserEmail(null);
         setUserRole(null);
     };
 
+    useEffect(() => {
+        const storedLoggedIn = localStorage.getItem('hbus_user_logged_in') === 'true';
+        const storedRole = localStorage.getItem('hbus_user_role');
+        const storedUserId = localStorage.getItem('hbus_user_id');
+        setLoggedIn(storedLoggedIn);
+        setUserRole(storedRole);
+
+        if (!storedLoggedIn || !storedUserId) {
+            return;
+        }
+
+        let isCurrent = true;
+
+        (async () => {
+            try {
+                const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users/${storedUserId}`);
+                if (!isCurrent) {
+                    return;
+                }
+
+                const role = response.data?.role ?? storedRole;
+                setUserRole(role);
+                localStorage.setItem('hbus_user_role', role);
+            } catch (error) {
+                console.error('Failed to refresh user role:', error);
+                if (isCurrent) {
+                    clearLoginState();
+                }
+            }
+        })();
+
+        return () => {
+            isCurrent = false;
+        };
+    }, []);
+
     const handleGoogleSignIn = async () => {
         try {
-            const result = await signInWithGoogle();
-            const email = result?.user?.email;
-            if (!email) {
-                console.error('Google sign-in did not return an email.');
-                return;
-            }
+            await toast.promise(
+                (async () => {
+                    const result = await signInWithGoogle();
+                    const email = result?.user?.email;
+                    if (!email) {
+                        throw new Error('Google sign-in did not return an email.');
+                    }
 
-            const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
-            const users = response.data;
-            const existingUser = Array.isArray(users)
-                ? users.some((user) => user?.email === email)
-                : false;
+                    const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
+                    const users = response.data;
+                    const existingUser = Array.isArray(users)
+                        ? users.some((user) => user?.email === email)
+                        : false;
 
-            if (!existingUser) {
-                navigate('/register', {
-                    state: {
-                        email,
-                        displayName: result.user.displayName ?? '',
-                    },
-                });
-                return;
-            }
+                    if (!existingUser) {
+                        navigate('/register', {
+                            state: {
+                                email,
+                                displayName: result.user.displayName ?? '',
+                            },
+                        });
+                        return;
+                    }
 
-            const userRecord = Array.isArray(users)
-                ? users.find((user) => user?.email === email)
-                : null;
+                    const userRecord = Array.isArray(users)
+                        ? users.find((user) => user?.email === email)
+                        : null;
 
-            const role = userRecord?.role ?? 'D';
-            const userId = userRecord?.userId ?? userRecord?._id ?? '';
-            setLoginState(email, role, userId);
-            console.log('User already exists:', email, 'role:', role);
-        } catch (error) {
-            if (error instanceof Error) {
-                console.error('Google sign-in failed:', error.message);
-            } else {
-                console.error('Google sign-in failed:', error);
-            }
+                    const role = userRecord?.role ?? 'D';
+                    const userId = userRecord?.userId ?? userRecord?._id ?? '';
+                    setLoginState(email, role, userId);
+                })(),
+                {
+                    loading: 'Signing in with Google...',
+                    success: 'Signed in successfully.',
+                    error: 'Google sign-in failed.',
+                },
+            );
+        } catch {
+            // Error shown via toast.promise.
         }
     };
 
     const handleLogout = async () => {
         try {
-            await signOutGoogle();
-        } catch (error) {
-            console.error('Logout failed:', error);
+            await toast.promise(
+                (async () => {
+                    await signOutGoogle();
+                    clearLoginState();
+                })(),
+                {
+                    loading: 'Signing out...',
+                    success: 'Signed out successfully.',
+                    error: 'Logout failed.',
+                },
+            );
+        } catch {
+            // Error shown via toast.promise.
         }
-
-        clearLoginState();
     };
 
     return (
@@ -97,7 +133,10 @@ const Home = () => {
                 <div className={styles.navbar}>
                             {loggedIn ? (
                         <>
-                            {userRole === 'A' && (
+                            {(userRole === 'A' || userRole === 'B') && (
+                                <button onClick={() => navigate('/purchase')}>PURCHASE ORDER</button>
+                            )}
+                    {userRole === 'A' && (
                                 <button onClick={() => navigate('/users')}>USERS</button>
                             )}
                             <button onClick={handleLogout}>LOGOUT</button>
