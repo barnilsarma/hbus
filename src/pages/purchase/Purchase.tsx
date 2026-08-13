@@ -1,9 +1,57 @@
 import axios from 'axios';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
+
+type Department = {
+  _id?: string;
+  id?: string;
+  name?: string;
+};
+
+type DepartmentReference = string | Department;
+
+type User = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  viewaccess?: DepartmentReference[];
+  editaccess?: DepartmentReference[];
+};
+
+const getEntityId = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    const entity = value as { _id?: unknown; id?: unknown };
+    if (typeof entity._id === 'string') {
+      return entity._id;
+    }
+    if (typeof entity.id === 'string') {
+      return entity.id;
+    }
+  }
+
+  return null;
+};
+
+const updateDepartmentAccess = (
+  access: DepartmentReference[] | undefined,
+  departmentId: string,
+  hasAccess: boolean,
+) => {
+  const accessIds = (access ?? [])
+    .map(getEntityId)
+    .filter((id): id is string => Boolean(id) && id !== departmentId);
+
+  return hasAccess ? [...accessIds, departmentId] : accessIds;
+};
 
 type PurchaseItem = {
   _id?: string;
@@ -43,8 +91,6 @@ const visibleFields = [
   'receiptdate',
   'receivedqty',
 ];
-
-const hiddenFields = ['_id', 'id', 'createdAt', 'updatedAt', '__v'];
 
 const statusOptions = ['INCOMPLETE', 'DELAYED', 'COMPLETE'] as const;
 
@@ -105,6 +151,13 @@ const Purchase = () => {
   const [editField, setEditField] = useState<string>('');
   const [editValue, setEditValue] = useState<string>('');
   
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [showAccessCheckModal, setShowAccessCheckModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [viewAccess, setViewAccess] = useState(false);
+  const [editAccess, setEditAccess] = useState(false);
+  const [purchaseDepartment, setPurchaseDepartment] = useState<Department | null>(null);
 
   const role = localStorage.getItem('hbus_user_role');
   const canEdit = role === 'A' || role === 'B';
@@ -133,36 +186,109 @@ const Purchase = () => {
     }
   };
 
+  const loadUsers = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
+      setUsers(Array.isArray(response.data) ? response.data : []);
+    } catch {
+      toast.error('Failed to load users.');
+    }
+  };
+
+  const loadPurchaseDepartment = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/departments`);
+      const depts = Array.isArray(response.data) ? response.data : [];
+      const purchaseDept = depts.find((dept: Department) => dept.name?.toLowerCase() === 'purchase');
+      if (!purchaseDept || !getEntityId(purchaseDept)) {
+        setPurchaseDepartment(null);
+        toast.error('Purchase department was not found.');
+        return null;
+      }
+
+      setPurchaseDepartment(purchaseDept);
+      return purchaseDept;
+    } catch {
+      toast.error('Failed to load departments.');
+      return null;
+    }
+  };
+
+  const openManageAccess = async () => {
+    setShowAccessModal(true);
+    const [, department] = await Promise.all([loadUsers(), loadPurchaseDepartment()]);
+
+    if (!department) {
+      setShowAccessModal(false);
+    }
+  };
+
+  const openAccessModal = async (user: User) => {
+    const departmentId = getEntityId(purchaseDepartment);
+    const userId = getEntityId(user);
+    if (!departmentId || !userId) {
+      toast.error('Unable to identify the user or Purchase department.');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users/${userId}`);
+      const userData = response.data;
+      setSelectedUser(userData);
+      setViewAccess((userData.viewaccess ?? []).some((access: DepartmentReference) => getEntityId(access) === departmentId));
+      setEditAccess((userData.editaccess ?? []).some((access: DepartmentReference) => getEntityId(access) === departmentId));
+      setShowAccessCheckModal(true);
+    } catch {
+      toast.error('Failed to load user access.');
+    }
+  };
+
+  const closeAccessCheckModal = () => {
+    setShowAccessCheckModal(false);
+    setSelectedUser(null);
+    setViewAccess(false);
+    setEditAccess(false);
+  };
+
+  const saveAccessChanges = async () => {
+    const departmentId = getEntityId(purchaseDepartment);
+    if (!selectedUser || !departmentId) {
+      return;
+    }
+
+    try {
+      const userId = getEntityId(selectedUser);
+      if (!userId) {
+        toast.error('User ID not found.');
+        return;
+      }
+
+      const updateData = {
+        viewaccess: updateDepartmentAccess(selectedUser.viewaccess, departmentId, viewAccess),
+        editaccess: updateDepartmentAccess(selectedUser.editaccess, departmentId, editAccess),
+      };
+
+      await toast.promise(
+        (async () => {
+          await axios.put(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, updateData);
+        })(),
+        {
+          loading: 'Saving access changes...',
+          success: 'Access updated successfully.',
+          error: 'Failed to update access.',
+        },
+      );
+
+      await loadUsers();
+      closeAccessCheckModal();
+    } catch {
+      toast.error('Failed to save access changes.');
+    }
+  };
+
   useEffect(() => {
     loadPurchases();
   }, []);
-
-  
-
-  const handleCreateSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const payload = Object.fromEntries(
-      Object.entries(createData)
-        .map(([key, value]) => [key, normalizeFieldValue(key, value)])
-        .filter(([, value]) => value !== undefined),
-    );
-    try {
-      await toast.promise(
-        (async () => {
-          await axios.post(`${import.meta.env.VITE_APP_API}/api/purchases`, payload);
-          await loadPurchases();
-          closeCreateModal();
-        })(),
-        {
-          loading: 'Creating purchase item...',
-          success: 'Purchase created.',
-          error: 'Failed to create purchase.',
-        },
-      );
-    } catch {
-      setError('Failed to create purchase.');
-    }
-  };
 
   const openEditModal = (item: PurchaseItem, field: string) => {
     setEditItem(item);
@@ -210,11 +336,10 @@ const Purchase = () => {
     }
   };
 
-  const renderTable = () => {
+  const RenderTable = () => {
     if (loading) {
       return <div className={styles.empty}>Loading...</div>;
     }
-
     if (purchases.length === 0) {
       return <div className={styles.empty}>No purchases found.</div>;
     }
@@ -268,6 +393,11 @@ const Purchase = () => {
             <p>Review and manage purchase entries.</p>
           </div>
           <div className={styles.actions}>
+            {canEdit && (
+              <button type="button" className={styles.createButton} onClick={openManageAccess}>
+                Manage Access
+              </button>
+            )}
             <button type="button" className={styles.createButton} onClick={() => navigate('/purchase/new')}>
               Create
             </button>
@@ -277,7 +407,7 @@ const Purchase = () => {
 
         {error && <div className={styles.error}>{error}</div>}
 
-        {renderTable()}
+        <RenderTable/>
       </section>
 
       
@@ -321,6 +451,95 @@ const Purchase = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAccessModal && (
+        <div className={styles.modalBackdrop}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h2>Manage User Access</h2>
+              <button type="button" className={styles.closeButton} onClick={() => setShowAccessModal(false)}>
+                ×
+              </button>
+            </div>
+            <div className={styles.accessList}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={getEntityId(user) ?? user.email}>
+                      <td>{user.name || '-'}</td>
+                      <td>{user.email || '-'}</td>
+                      <td>{user.role || '-'}</td>
+                      <td>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className={styles.primaryButton}
+                            onClick={() => openAccessModal(user)}
+                          >
+                            Access
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.secondaryButton} onClick={() => setShowAccessModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAccessCheckModal && selectedUser && (
+        <div className={styles.modalBackdrop}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h2>Access for {selectedUser.name || selectedUser.email}</h2>
+              <button type="button" className={styles.closeButton} onClick={closeAccessCheckModal}>
+                ×
+              </button>
+            </div>
+            <div className={styles.accessCheckboxes}>
+              <label className={styles.field}>
+                <input
+                  type="checkbox"
+                  checked={viewAccess}
+                  onChange={(e) => setViewAccess(e.target.checked)}
+                />
+                <span>View Access</span>
+              </label>
+              <label className={styles.field}>
+                <input
+                  type="checkbox"
+                  checked={editAccess}
+                  onChange={(e) => setEditAccess(e.target.checked)}
+                />
+                <span>Edit Access</span>
+              </label>
+            </div>
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.secondaryButton} onClick={closeAccessCheckModal}>
+                Cancel
+              </button>
+              <button type="button" className={styles.primaryButton} onClick={saveAccessChanges}>
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -4,22 +4,30 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
 
-const fieldDefinitions = [
+// Field definition type for purchase items
+type FieldDef = {
+  name: string;
+  label: string;
+  type: 'text' | 'number' | 'date' | 'select';
+  required: boolean;
+};
+
+const fieldDefinitions: FieldDef[] = [
   { name: 'PONumber', label: 'PO Number', type: 'text', required: true },
-  { name: 'supplier', label: 'Supplier', type: 'text' },
-  { name: 'item', label: 'Item', type: 'text' },
-  { name: 'gst', label: 'GST (%)', type: 'number' },
-  { name: 'unit', label: 'Unit', type: 'text' },
-  { name: 'rate', label: 'Rate', type: 'number' },
-  { name: 'qty', label: 'Quantity', type: 'number' },
-  { name: 'date', label: 'Order Date', type: 'date' },
-  { name: 'status', label: 'Status', type: 'select' },
-  { name: 'amount', label: 'Amount', type: 'number' },
-  { name: 'invoicenumber', label: 'Invoice Number', type: 'text' },
-  { name: 'invoicedate', label: 'Invoice Date', type: 'date' },
-  { name: 'receiptdate', label: 'Receipt Date', type: 'text' },
-  { name: 'receivedqty', label: 'Received Quantity', type: 'number' },
-] as const;
+  { name: 'supplier', label: 'Supplier', type: 'text', required: false },
+  { name: 'item', label: 'Item', type: 'text', required: false },
+  { name: 'gst', label: 'GST (%)', type: 'number', required: false },
+  { name: 'unit', label: 'Unit', type: 'text', required: false },
+  { name: 'rate', label: 'Rate', type: 'number', required: false },
+  { name: 'qty', label: 'Quantity', type: 'number', required: false },
+  { name: 'date', label: 'Order Date', type: 'date', required: false },
+  { name: 'status', label: 'Status', type: 'select', required: false },
+  { name: 'amount', label: 'Amount', type: 'number', required: false },
+  { name: 'invoicenumber', label: 'Invoice Number', type: 'text', required: false },
+  { name: 'invoicedate', label: 'Invoice Date', type: 'date', required: false },
+  { name: 'receiptdate', label: 'Receipt Date', type: 'text', required: false },
+  { name: 'receivedqty', label: 'Received Quantity', type: 'number', required: false },
+];
 
 const visibleFields = fieldDefinitions.map((f) => f.name);
 const statusOptions = ['INCOMPLETE', 'DELAYED', 'COMPLETE'] as const;
@@ -92,7 +100,7 @@ export default function PurchaseNew() {
                 <select
                   value={createData[field.name] ?? ''}
                   onChange={(e) => setCreateData((p) => ({ ...p, [field.name]: e.target.value }))}
-                  required={field.required ?? false}
+                  required={field.required!}
                 >
                   <option value="">Select status</option>
                   {statusOptions.map((s) => (
@@ -106,7 +114,7 @@ export default function PurchaseNew() {
                   type={field.type}
                   value={createData[field.name] ?? ''}
                   onChange={(e) => setCreateData((p) => ({ ...p, [field.name]: e.target.value }))}
-                  required={field.required ?? false}
+                  required={field.required!}
                 />
               )}
             </label>
