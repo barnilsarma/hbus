@@ -164,6 +164,28 @@ td {
   color: #f8fafc;
 }
 
+.accessNote {
+  margin: 0 0 16px;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.accessCheckboxes {
+  display: grid;
+  gap: 12px;
+}
+
+.accessCheckboxes .field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.accessCheckboxes .field input {
+  width: auto;
+  padding: 0;
+}
+
 .modalActions {
   display: flex;
   justify-content: flex-end;

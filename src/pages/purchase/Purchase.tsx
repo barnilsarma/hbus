@@ -5,22 +5,15 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
 
-type Department = {
-  _id?: string;
-  id?: string;
-  name?: string;
-};
-
-type DepartmentReference = string | Department;
-
 type User = {
+  userId?: string;
   _id?: string;
   id?: string;
   name?: string;
   email?: string;
   role?: string;
-  viewaccess?: DepartmentReference[];
-  editaccess?: DepartmentReference[];
+  viewaccess?: string[];
+  editaccess?: string[];
 };
 
 const getEntityId = (value: unknown): string | null => {
@@ -29,7 +22,10 @@ const getEntityId = (value: unknown): string | null => {
   }
 
   if (value && typeof value === 'object') {
-    const entity = value as { _id?: unknown; id?: unknown };
+    const entity = value as { userId?: unknown; _id?: unknown; id?: unknown };
+    if (typeof entity.userId === 'string') {
+      return entity.userId;
+    }
     if (typeof entity._id === 'string') {
       return entity._id;
     }
@@ -41,17 +37,11 @@ const getEntityId = (value: unknown): string | null => {
   return null;
 };
 
-const updateDepartmentAccess = (
-  access: DepartmentReference[] | undefined,
-  departmentId: string,
-  hasAccess: boolean,
-) => {
-  const accessIds = (access ?? [])
-    .map(getEntityId)
-    .filter((id): id is string => Boolean(id) && id !== departmentId);
+const hasDepartmentAccess = (access: string[] | undefined, department: string) => (
+  (access ?? []).some((departmentName) => departmentName.trim().toLowerCase() === department.trim().toLowerCase())
+);
 
-  return hasAccess ? [...accessIds, departmentId] : accessIds;
-};
+const PURCHASE_DEPARTMENT = 'Purchase';
 
 type PurchaseItem = {
   _id?: string;
@@ -157,10 +147,15 @@ const Purchase = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [viewAccess, setViewAccess] = useState(false);
   const [editAccess, setEditAccess] = useState(false);
-  const [purchaseDepartment, setPurchaseDepartment] = useState<Department | null>(null);
 
   const role = localStorage.getItem('hbus_user_role');
   const canEdit = role === 'A' || role === 'B';
+  const selectedUserHasViewAccess = Boolean(
+    selectedUser && hasDepartmentAccess(selectedUser.viewaccess, PURCHASE_DEPARTMENT),
+  );
+  const selectedUserHasEditAccess = Boolean(
+    selectedUser && hasDepartmentAccess(selectedUser.editaccess, PURCHASE_DEPARTMENT),
+  );
 
   const columns = visibleFields;
 
@@ -189,54 +184,31 @@ const Purchase = () => {
   const loadUsers = async () => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
-      setUsers(Array.isArray(response.data) ? response.data : []);
+      const allUsers = Array.isArray(response.data) ? response.data as User[] : [];
+      setUsers(allUsers.filter((user) => user.role === 'C' || user.role === 'D'));
     } catch {
       toast.error('Failed to load users.');
     }
   };
 
-  const loadPurchaseDepartment = async () => {
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/departments`);
-      const depts = Array.isArray(response.data) ? response.data : [];
-      const purchaseDept = depts.find((dept: Department) => dept.name?.toLowerCase() === 'purchase');
-      if (!purchaseDept || !getEntityId(purchaseDept)) {
-        setPurchaseDepartment(null);
-        toast.error('Purchase department was not found.');
-        return null;
-      }
-
-      setPurchaseDepartment(purchaseDept);
-      return purchaseDept;
-    } catch {
-      toast.error('Failed to load departments.');
-      return null;
-    }
-  };
-
   const openManageAccess = async () => {
     setShowAccessModal(true);
-    const [, department] = await Promise.all([loadUsers(), loadPurchaseDepartment()]);
-
-    if (!department) {
-      setShowAccessModal(false);
-    }
+    await loadUsers();
   };
 
   const openAccessModal = async (user: User) => {
-    const departmentId = getEntityId(purchaseDepartment);
     const userId = getEntityId(user);
-    if (!departmentId || !userId) {
-      toast.error('Unable to identify the user or Purchase department.');
+    if (!userId) {
+      toast.error('Unable to identify the user.');
       return;
     }
 
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users/${userId}`);
-      const userData = response.data;
+      const userData = response.data as User;
       setSelectedUser(userData);
-      setViewAccess((userData.viewaccess ?? []).some((access: DepartmentReference) => getEntityId(access) === departmentId));
-      setEditAccess((userData.editaccess ?? []).some((access: DepartmentReference) => getEntityId(access) === departmentId));
+      setViewAccess(hasDepartmentAccess(userData.viewaccess, PURCHASE_DEPARTMENT));
+      setEditAccess(hasDepartmentAccess(userData.editaccess, PURCHASE_DEPARTMENT));
       setShowAccessCheckModal(true);
     } catch {
       toast.error('Failed to load user access.');
@@ -251,8 +223,7 @@ const Purchase = () => {
   };
 
   const saveAccessChanges = async () => {
-    const departmentId = getEntityId(purchaseDepartment);
-    if (!selectedUser || !departmentId) {
+    if (!selectedUser) {
       return;
     }
 
@@ -263,15 +234,32 @@ const Purchase = () => {
         return;
       }
 
-      const updateData = {
-        viewaccess: updateDepartmentAccess(selectedUser.viewaccess, departmentId, viewAccess),
-        editaccess: updateDepartmentAccess(selectedUser.editaccess, departmentId, editAccess),
-      };
+      if ((selectedUserHasViewAccess && !viewAccess) || (selectedUserHasEditAccess && !editAccess)) {
+        toast.error('This API can add access only. A remove-access endpoint is required to revoke it.');
+        return;
+      }
+
+      const requests: Promise<unknown>[] = [];
+      if (viewAccess && !selectedUserHasViewAccess) {
+        requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
+          department: PURCHASE_DEPARTMENT,
+          access: 'view',
+        }));
+      }
+      if (editAccess && !selectedUserHasEditAccess) {
+        requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
+          department: PURCHASE_DEPARTMENT,
+          access: 'edit',
+        }));
+      }
+
+      if (requests.length === 0) {
+        toast.info('Select an access type that has not already been granted.');
+        return;
+      }
 
       await toast.promise(
-        (async () => {
-          await axios.put(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, updateData);
-        })(),
+        Promise.all(requests),
         {
           loading: 'Saving access changes...',
           success: 'Access updated successfully.',
@@ -282,7 +270,7 @@ const Purchase = () => {
       await loadUsers();
       closeAccessCheckModal();
     } catch {
-      toast.error('Failed to save access changes.');
+      // Error shown via toast.promise.
     }
   };
 
@@ -515,6 +503,9 @@ const Purchase = () => {
               </button>
             </div>
             <div className={styles.accessCheckboxes}>
+              <p className={styles.accessNote}>
+                Manage this user&apos;s access to the Purchase department.
+              </p>
               <label className={styles.field}>
                 <input
                   type="checkbox"
