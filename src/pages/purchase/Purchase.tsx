@@ -149,7 +149,34 @@ const Purchase = () => {
   const [editAccess, setEditAccess] = useState(false);
 
   const role = localStorage.getItem('hbus_user_role');
-  const canEdit = role === 'A' || role === 'B';
+  const isAdmin = role === 'A' || role === 'B';
+  const [canEditItems, setCanEditItems] = useState<boolean>(isAdmin);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      try {
+        const storedEditAccess = JSON.parse(localStorage.getItem('hbus_user_editaccess') || '[]');
+        if (hasDepartmentAccess(storedEditAccess, PURCHASE_DEPARTMENT)) {
+          setCanEditItems(true);
+          return;
+        }
+      } catch (e) {
+        // Ignore JSON parse errors
+      }
+
+      const currentUserId = localStorage.getItem('hbus_user_id') || localStorage.getItem('userId');
+      if (currentUserId) {
+        axios.get(`${import.meta.env.VITE_APP_API}/api/users/${currentUserId}`)
+          .then((res) => {
+            if (hasDepartmentAccess(res.data?.editaccess, PURCHASE_DEPARTMENT)) {
+              setCanEditItems(true);
+            }
+          })
+          .catch((err) => console.error('Failed to fetch logged in user access.', err));
+      }
+    }
+  }, [isAdmin]);
+
   const selectedUserHasViewAccess = Boolean(
     selectedUser && hasDepartmentAccess(selectedUser.viewaccess, PURCHASE_DEPARTMENT),
   );
@@ -209,6 +236,7 @@ const Purchase = () => {
       setSelectedUser(userData);
       setViewAccess(hasDepartmentAccess(userData.viewaccess, PURCHASE_DEPARTMENT));
       setEditAccess(hasDepartmentAccess(userData.editaccess, PURCHASE_DEPARTMENT));
+
       setShowAccessCheckModal(true);
     } catch {
       toast.error('Failed to load user access.');
@@ -222,10 +250,7 @@ const Purchase = () => {
     setEditAccess(false);
   };
 
-  // --- HIGHLIGHT: Rewritten saveAccessChanges function ---
-  // 1. Removed the strict block that returned early and prevented API calls if an uncheck happened.
-  // 2. Safely captures "adds" and executes them, while warning the user if they attempted a "remove" 
-  //    (since your node controller uses $push only).
+  // --- HIGHLIGHT: Updated Logic Using Delete Controller ---
   const saveAccessChanges = async () => {
     if (!selectedUser) return;
 
@@ -237,39 +262,37 @@ const Purchase = () => {
       }
 
       const requests: Promise<unknown>[] = [];
-      let attemptedRemoval = false;
 
-      // Check if view access needs to be added
+      // Add or remove View Access
       if (viewAccess && !selectedUserHasViewAccess) {
         requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
           department: PURCHASE_DEPARTMENT,
           access: 'view',
         }));
       } else if (!viewAccess && selectedUserHasViewAccess) {
-        attemptedRemoval = true;
+        requests.push(axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
+          data: { department: PURCHASE_DEPARTMENT, access: 'view' }
+        }));
       }
 
-      // Check if edit access needs to be added
+      // Add or remove Edit Access
       if (editAccess && !selectedUserHasEditAccess) {
         requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
           department: PURCHASE_DEPARTMENT,
           access: 'edit',
         }));
       } else if (!editAccess && selectedUserHasEditAccess) {
-        attemptedRemoval = true;
+        requests.push(axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
+          data: { department: PURCHASE_DEPARTMENT, access: 'edit' }
+        }));
       }
 
-      // If nothing to push, handle the UI notifications
       if (requests.length === 0) {
-        if (attemptedRemoval) {
-          toast.error('To remove access, the backend API requires a $pull logic update. Currently, it only adds access.');
-        } else {
-          toast.info('No new access to add.');
-        }
+        toast.info('No access changes to save.');
         return;
       }
 
-      // Fire off all patches concurrently
+      // Fire off all patches and deletes concurrently
       await toast.promise(
         Promise.all(requests),
         {
@@ -279,15 +302,10 @@ const Purchase = () => {
         },
       );
 
-      // Alert if they checked one but unchecked another
-      if (attemptedRemoval) {
-        toast.warning('New access was added, but removing access is currently not supported by the backend.');
-      }
-
       await loadUsers();
       closeAccessCheckModal();
     } catch {
-      // Error shown via toast.promise.
+      // Error is caught and shown by toast.promise
     }
   };
   // --- END HIGHLIGHT ---
@@ -358,7 +376,7 @@ const Purchase = () => {
               {columns.map((column) => (
                 <th key={column}>{column}</th>
               ))}
-              {canEdit && <th>Actions</th>}
+              {canEditItems && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -369,7 +387,7 @@ const Purchase = () => {
                   {columns.map((column) => (
                     <td key={`${itemId}-${column}`}>
                       <div className={styles.cellValue}>{formatCellValue(column, item[column])}</div>
-                      {canEdit && (
+                      {canEditItems && (
                         <button
                           type="button"
                           className={styles.cellEdit}
@@ -380,7 +398,7 @@ const Purchase = () => {
                       )}
                     </td>
                   ))}
-                  {canEdit && <td></td>}
+                  {canEditItems && <td></td>}
                 </tr>
               );
             })}
@@ -399,7 +417,7 @@ const Purchase = () => {
             <p>Review and manage purchase entries.</p>
           </div>
           <div className={styles.actions}>
-            {canEdit && (
+            {isAdmin && (
               <button type="button" className={styles.createButton} onClick={openManageAccess}>
                 Manage Access
               </button>
@@ -415,8 +433,6 @@ const Purchase = () => {
 
         <RenderTable/>
       </section>
-
-      
 
       {showEditModal && editItem && (
         <div className={styles.modalBackdrop}>
@@ -487,7 +503,7 @@ const Purchase = () => {
                       <td>{user.email || '-'}</td>
                       <td>{user.role || '-'}</td>
                       <td>
-                        {canEdit && (
+                        {isAdmin && (
                           <button
                             type="button"
                             className={styles.primaryButton}
@@ -528,7 +544,11 @@ const Purchase = () => {
                 <input
                   type="checkbox"
                   checked={viewAccess}
-                  onChange={(e) => setViewAccess(e.target.checked)}
+                  onChange={(e) => {
+                    setViewAccess(e.target.checked);
+                    // Match the backend logic: if they can't view, they can't edit
+                    if (!e.target.checked) setEditAccess(false); 
+                  }}
                 />
                 <span>View Access</span>
               </label>
