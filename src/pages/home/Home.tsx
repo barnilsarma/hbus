@@ -9,6 +9,9 @@ const Home = () => {
     const navigate = useNavigate();
     const [loggedIn, setLoggedIn] = useState(false);
     const [userRole, setUserRole] = useState<string | null>(null);
+    const [viewaccess,setViewAccess]=useState([]);
+    const [editaccess,setEditAccess]=useState([]);
+    
 
     const setLoginState = (email: string, role: string, userId: string) => {
         localStorage.setItem('hbus_user_logged_in', 'true');
@@ -49,6 +52,13 @@ const Home = () => {
                 }
 
                 const role = response.data?.role ?? storedRole;
+                const viewaccess=response.data?.viewaccess ?? [];
+                const editaccess=response.data?.editaccess ?? [];
+                console.log(viewaccess);
+                console.log(editaccess);
+                setViewAccess(viewaccess);
+                setEditAccess(editaccess);
+                setLoggedIn(true);
                 setUserRole(role);
                 localStorage.setItem('hbus_user_role', role);
             } catch (error) {
@@ -133,7 +143,7 @@ const Home = () => {
                 <div className={styles.navbar}>
                             {loggedIn ? (
                         <>
-                            {(userRole === 'A' || userRole === 'B') && (
+                            {((userRole === 'A' || userRole === 'B') || (viewaccess.findIndex((item) => item === 'Purchase') !== -1 || editaccess.findIndex((item) => item === 'Purchase') !== -1)) && (
                                 <button onClick={() => navigate('/purchase')}>PURCHASE ORDER</button>
                             )}
                     {userRole === 'A' && (

@@ -222,10 +222,12 @@ const Purchase = () => {
     setEditAccess(false);
   };
 
+  // --- HIGHLIGHT: Rewritten saveAccessChanges function ---
+  // 1. Removed the strict block that returned early and prevented API calls if an uncheck happened.
+  // 2. Safely captures "adds" and executes them, while warning the user if they attempted a "remove" 
+  //    (since your node controller uses $push only).
   const saveAccessChanges = async () => {
-    if (!selectedUser) {
-      return;
-    }
+    if (!selectedUser) return;
 
     try {
       const userId = getEntityId(selectedUser);
@@ -234,30 +236,40 @@ const Purchase = () => {
         return;
       }
 
-      if ((selectedUserHasViewAccess && !viewAccess) || (selectedUserHasEditAccess && !editAccess)) {
-        toast.error('This API can add access only. A remove-access endpoint is required to revoke it.');
-        return;
-      }
-
       const requests: Promise<unknown>[] = [];
+      let attemptedRemoval = false;
+
+      // Check if view access needs to be added
       if (viewAccess && !selectedUserHasViewAccess) {
         requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
           department: PURCHASE_DEPARTMENT,
           access: 'view',
         }));
+      } else if (!viewAccess && selectedUserHasViewAccess) {
+        attemptedRemoval = true;
       }
+
+      // Check if edit access needs to be added
       if (editAccess && !selectedUserHasEditAccess) {
         requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
           department: PURCHASE_DEPARTMENT,
           access: 'edit',
         }));
+      } else if (!editAccess && selectedUserHasEditAccess) {
+        attemptedRemoval = true;
       }
 
+      // If nothing to push, handle the UI notifications
       if (requests.length === 0) {
-        toast.info('Select an access type that has not already been granted.');
+        if (attemptedRemoval) {
+          toast.error('To remove access, the backend API requires a $pull logic update. Currently, it only adds access.');
+        } else {
+          toast.info('No new access to add.');
+        }
         return;
       }
 
+      // Fire off all patches concurrently
       await toast.promise(
         Promise.all(requests),
         {
@@ -267,12 +279,18 @@ const Purchase = () => {
         },
       );
 
+      // Alert if they checked one but unchecked another
+      if (attemptedRemoval) {
+        toast.warning('New access was added, but removing access is currently not supported by the backend.');
+      }
+
       await loadUsers();
       closeAccessCheckModal();
     } catch {
       // Error shown via toast.promise.
     }
   };
+  // --- END HIGHLIGHT ---
 
   useEffect(() => {
     loadPurchases();
