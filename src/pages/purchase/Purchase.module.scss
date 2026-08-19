@@ -1,201 +1,395 @@
-.purchase {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 40px 16px;
-  background: #090b12;
-  color: #eef2ff;
+// Reset box-sizing inside module scope to prevent padding width inflation
+.purchase,
+.purchase * {
+  box-sizing: border-box;
 }
 
-.card {
-  width: min(100%, 1100px);
-  padding: 28px;
-  border-radius: 30px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 16, 35, 0.92));
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  box-shadow: 0 32px 90px rgba(7, 15, 29, 0.4);
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-}
-
-.createButton,
-.backButton,
-.cellEdit,
-.secondaryButton,
-.primaryButton {
+// Shared Base Button Style (Placeholder)
+%btn-base {
   border: none;
   border-radius: 14px;
   padding: 12px 18px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  @media (max-width: 768px) {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
 }
 
+// Button Classes
 .createButton,
 .primaryButton {
+  @extend %btn-base;
   background: #2563eb;
   color: #ffffff;
+
+  &:hover {
+    background: #1d4ed8;
+  }
 }
 
 .backButton,
 .secondaryButton {
+  @extend %btn-base;
   background: rgba(148, 163, 184, 0.12);
   color: #e2e8f0;
+
+  &:hover {
+    background: rgba(148, 163, 184, 0.2);
+  }
 }
 
-.error {
-  padding: 12px 16px;
-  border-radius: 16px;
-  background: rgba(220, 38, 38, 0.1);
-  color: #fecaca;
-  margin-bottom: 20px;
+.cell {
+  cursor:pointer;
+  .cellEdit {
+    @extend %btn-base;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    margin-top: 6px;
+    gap: 6px;
+    background-color: transparent;
+    color: #38bdf8;
+
+    .cellEditIcon {
+      opacity: 0;
+      transition-duration: 1s;
+    }
+
+    
+  }
+  &:hover .cellEdit {
+      .cellEditIcon{
+        opacity: 1;
+        transition-duration: 1s;
+      }
+    }
 }
 
-.tableWrapper {
-  overflow-x: auto;
+// Main Layout Container
+.purchase {
+  min-height: 100vh;
+  padding: 40px 16px;
+  background: #090b12;
+  color: #eef2ff;
+
+  @media (max-width: 768px) {
+    padding: 20px 12px;
+  }
 }
 
-.table {
+.card {
   width: 100%;
-  border-collapse: collapse;
-  min-width: 720px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 16, 35, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 32px 90px rgba(7, 15, 29, 0.4);
+  overflow: hidden;
+
+  @media (max-width: 1024px) {
+    padding: 24px;
+    border-radius: 24px;
+  }
+
+  @media (max-width: 768px) {
+    padding: 20px 16px;
+    border-radius: 20px;
+  }
+
+  // Header
+  .header {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 24px;
+
+    @media (max-width: 768px) {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.75rem;
+
+      @media (max-width: 768px) {
+        font-size: 1.5rem;
+      }
+    }
+
+    p {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+  }
+
+  // States
+  .error {
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: rgba(220, 38, 38, 0.1);
+    color: #fecaca;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+  }
+
+  .empty {
+    padding: 32px 24px;
+    border-radius: 20px;
+    background: rgba(148, 163, 184, 0.08);
+    color: #cbd5e1;
+    text-align: center;
+    font-size: 1.05rem;
+  }
+
+  // Table & Scroll Wrapper
+  .tableWrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.08);
+
+    // Dark-themed slim scrollbar
+    &::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 0 0 12px 12px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 8px;
+
+      &:hover {
+        background: rgba(148, 163, 184, 0.5);
+      }
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+
+      th,
+      td {
+        padding: 16px 18px;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+
+        @media (max-width: 1024px) {
+          padding: 12px 14px;
+        }
+      }
+
+      th {
+        color: #94a3b8;
+        font-size: 0.95rem;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+
+      td {
+        color: #e2e8f0;
+        position: relative;
+        font-size: 0.95rem;
+
+        .cellValue {
+          display: block;
+        }
+      }
+    }
+  }
 }
 
-th,
-td {
-  padding: 16px 18px;
-  text-align: left;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-}
-
-th {
-  color: #94a3b8;
-  font-size: 0.95rem;
-  letter-spacing: 0.02em;
-}
-
-td {
-  color: #e2e8f0;
-  position: relative;
-}
-
-.cellValue {
-  display: block;
-}
-
-.cellEdit {
-  margin-top: 8px;
-  display: inline-flex;
-  gap: 8px;
-  background: rgba(56, 189, 248, 0.1);
-  color: #38bdf8;
-}
-
+// Modal Overlays
 .modalBackdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
   display: grid;
   place-items: center;
-  z-index: 10;
-}
+  z-index: 50;
+  padding: 16px;
 
-.modal {
-  width: min(100%, 560px);
-  background: #0f172a;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  padding: 24px;
-  box-shadow: 0 38px 80px rgba(15, 23, 42, 0.35);
-}
+  .modal {
+    width: min(100%, 560px);
+    background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 38px 80px rgba(7, 15, 29, 0.6);
+    max-height: 90vh;
+    overflow-y: auto;
 
-.modalHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-  margin-bottom: 24px;
-}
+    @media (max-width: 768px) {
+      padding: 20px;
+      border-radius: 20px;
+    }
 
-.modalHeader h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  color: #f8fafc;
-}
+    .modalHeader {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 24px;
 
-.closeButton {
-  border: none;
-  background: transparent;
-  color: #f8fafc;
-  font-size: 1.5rem;
-  cursor: pointer;
-}
+      h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #f8fafc;
 
-.form {
-  display: grid;
-  gap: 16px;
-}
+        @media (max-width: 768px) {
+          font-size: 1.25rem;
+        }
+      }
 
-.field {
-  display: grid;
-  gap: 8px;
-}
+      .closeButton {
+        border: none;
+        background: transparent;
+        color: #94a3b8;
+        font-size: 1.75rem;
+        cursor: pointer;
+        padding: 4px;
+        line-height: 1;
+        border-radius: 8px;
+        transition: all 0.2s;
 
-.field span {
-  color: #cbd5e1;
-}
+        &:hover {
+          color: #f8fafc;
+          background: rgba(148, 163, 184, 0.1);
+        }
+      }
+    }
 
-.field input {
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: #111827;
-  color: #f8fafc;
-}
+    .form {
+      display: grid;
+      gap: 16px;
 
-.accessNote {
-  margin: 0 0 16px;
-  color: #94a3b8;
-  font-size: 0.9rem;
-}
+      .field {
+        display: grid;
+        gap: 8px;
 
-.accessCheckboxes {
-  display: grid;
-  gap: 12px;
-}
+        span {
+          color: #cbd5e1;
+          font-size: 0.95rem;
+          font-weight: 500;
+        }
 
-.accessCheckboxes .field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+        input,
+        select {
+          width: 100%;
+          padding: 12px 14px;
+          border-radius: 12px;
+          border: 1px solid rgba(148, 163, 184, 0.18);
+          background: #111827;
+          color: #f8fafc;
+          font-family: inherit;
+          font-size: 0.95rem;
+          transition: border-color 0.2s;
 
-.accessCheckboxes .field input {
-  width: auto;
-  padding: 0;
-}
+          &:focus {
+            outline: none;
+            border-color: #38bdf8;
+          }
+        }
+      }
+    }
 
-.modalActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
+    .accessNote {
+      margin: 0 0 16px;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
 
-.empty {
-  padding: 24px;
-  border-radius: 20px;
-  background: rgba(148, 163, 184, 0.08);
-  color: #cbd5e1;
-  text-align: center;
+    .accessCheckboxes {
+      display: grid;
+      gap: 14px;
+      margin-bottom: 24px;
+
+      .field {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+
+        input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          padding: 0;
+          cursor: pointer;
+          accent-color: #2563eb;
+        }
+
+        span {
+          user-select: none;
+        }
+      }
+    }
+
+    .accessList {
+      overflow-x: auto;
+      margin-bottom: 24px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 12px;
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 450px;
+
+        th,
+        td {
+          padding: 12px 16px;
+          text-align: left;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+          color: #e2e8f0;
+          font-size: 0.9rem;
+        }
+
+        th {
+          color: #94a3b8;
+          background: rgba(15, 23, 42, 0.4);
+        }
+      }
+    }
+
+    .modalActions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 24px;
+
+      @media (max-width: 768px) {
+        flex-direction: column-reverse;
+
+        button {
+          width: 100%;
+        }
+      }
+    }
+  }
 }

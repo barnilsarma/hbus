@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
-
+import { FaPencilAlt } from 'react-icons/fa';
 type User = {
   userId?: string;
   _id?: string;
@@ -385,7 +385,7 @@ const Purchase = () => {
               return (
                 <tr key={itemId || Math.random().toString()}>
                   {columns.map((column) => (
-                    <td key={`${itemId}-${column}`}>
+                    <td key={`${itemId}-${column}`} className={styles.cell}>
                       <div className={styles.cellValue}>{formatCellValue(column, item[column])}</div>
                       {canEditItems && (
                         <button
@@ -393,7 +393,7 @@ const Purchase = () => {
                           className={styles.cellEdit}
                           onClick={() => openEditModal(item, column)}
                         >
-                          Edit
+                          <FaPencilAlt size={20} color="#ffffff" className={styles.cellEditIcon} />
                         </button>
                       )}
                     </td>
