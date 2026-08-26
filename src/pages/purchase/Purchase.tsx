@@ -1,10 +1,11 @@
 import axios from 'axios';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
-import { FaPencilAlt } from 'react-icons/fa';
+import { FaPencilAlt, FaFilter, FaTimes } from 'react-icons/fa';
+
 type User = {
   userId?: string;
   _id?: string;
@@ -103,6 +104,27 @@ const fieldDefinitions = [
 
 const fieldLabelMap = Object.fromEntries(fieldDefinitions.map((field) => [field.name, field.label]));
 
+// --- Filter Type Definitions ---
+export type FilterOperator =
+  | 'contains'
+  | 'equals'
+  | 'notEquals'
+  | 'startsWith'
+  | 'endsWith'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'between'
+  | 'before'
+  | 'after';
+
+export interface ColumnFilter {
+  operator: FilterOperator;
+  value: string;
+  valueTo?: string; // For range/between operations
+}
+
 const formatCellValue = (field: string, value: unknown) => {
   if (value === undefined || value === null || value === '') {
     return '-';
@@ -135,12 +157,16 @@ const Purchase = () => {
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
+  // --- Filtering State ---
+  const [showFilterRow, setShowFilterRow] = useState(false);
+  const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<PurchaseItem | null>(null);
   const [editField, setEditField] = useState<string>('');
   const [editValue, setEditValue] = useState<string>('');
-  
+
   const [showAccessModal, setShowAccessModal] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [showAccessCheckModal, setShowAccessCheckModal] = useState(false);
@@ -250,7 +276,6 @@ const Purchase = () => {
     setEditAccess(false);
   };
 
-  // --- HIGHLIGHT: Updated Logic Using Delete Controller ---
   const saveAccessChanges = async () => {
     if (!selectedUser) return;
 
@@ -263,7 +288,6 @@ const Purchase = () => {
 
       const requests: Promise<unknown>[] = [];
 
-      // Add or remove View Access
       if (viewAccess && !selectedUserHasViewAccess) {
         requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
           department: PURCHASE_DEPARTMENT,
@@ -271,11 +295,10 @@ const Purchase = () => {
         }));
       } else if (!viewAccess && selectedUserHasViewAccess) {
         requests.push(axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
-          data: { department: PURCHASE_DEPARTMENT, access: 'view' }
+          data: { department: PURCHASE_DEPARTMENT, access: 'view' },
         }));
       }
 
-      // Add or remove Edit Access
       if (editAccess && !selectedUserHasEditAccess) {
         requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
           department: PURCHASE_DEPARTMENT,
@@ -283,7 +306,7 @@ const Purchase = () => {
         }));
       } else if (!editAccess && selectedUserHasEditAccess) {
         requests.push(axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
-          data: { department: PURCHASE_DEPARTMENT, access: 'edit' }
+          data: { department: PURCHASE_DEPARTMENT, access: 'edit' },
         }));
       }
 
@@ -292,7 +315,6 @@ const Purchase = () => {
         return;
       }
 
-      // Fire off all patches and deletes concurrently
       await toast.promise(
         Promise.all(requests),
         {
@@ -308,11 +330,132 @@ const Purchase = () => {
       // Error is caught and shown by toast.promise
     }
   };
-  // --- END HIGHLIGHT ---
 
   useEffect(() => {
     loadPurchases();
   }, []);
+
+  // --- Filter Logic ---
+  const handleFilterChange = (field: string, key: keyof ColumnFilter, value: string) => {
+    setFilters((prev) => {
+      const currentFilter = prev[field] || { operator: 'contains', value: '' };
+      const updatedFilter = { ...currentFilter, [key]: value };
+
+      if (!updatedFilter.value && !updatedFilter.valueTo) {
+        const { [field]: _, ...rest } = prev;
+        return rest;
+      }
+
+      return { ...prev, [field]: updatedFilter };
+    });
+  };
+
+  const clearFilters = () => {
+    setFilters({});
+  };
+
+  const filteredPurchases = useMemo(() => {
+    return purchases.filter((item) => {
+      return Object.entries(filters).every(([field, filter]) => {
+        if (!filter || (!filter.value && !filter.valueTo)) return true;
+
+        const rawValue = item[field];
+        const definition = fieldDefinitions.find((f) => f.name === field);
+        const fieldType = definition?.type ?? 'text';
+
+        if (rawValue === undefined || rawValue === null || rawValue === '') {
+          return false;
+        }
+
+        // 1. Number comparison
+        if (fieldType === 'number') {
+          const numVal = Number(rawValue);
+          const valFrom = Number(filter.value);
+          const valTo = Number(filter.valueTo);
+
+          if (Number.isNaN(numVal)) return false;
+
+          switch (filter.operator) {
+            case 'equals':
+              return numVal === valFrom;
+            case 'notEquals':
+              return numVal !== valFrom;
+            case 'gt':
+              return numVal > valFrom;
+            case 'gte':
+              return numVal >= valFrom;
+            case 'lt':
+              return numVal < valFrom;
+            case 'lte':
+              return numVal <= valFrom;
+            case 'between':
+              return (
+                (!filter.value || numVal >= valFrom) &&
+                (!filter.valueTo || numVal <= valTo)
+              );
+            default:
+              return true;
+          }
+        }
+
+        // 2. Date comparison
+        if (fieldType === 'date') {
+          const itemTime = new Date(rawValue).getTime();
+          const filterTime = new Date(filter.value).getTime();
+          const filterTimeTo = new Date(filter.valueTo || '').getTime();
+
+          if (Number.isNaN(itemTime)) return false;
+
+          const normalizeDay = (timestamp: number) => {
+            const d = new Date(timestamp);
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+          };
+
+          const itemDay = normalizeDay(itemTime);
+          const filterDay = normalizeDay(filterTime);
+          const filterDayTo = normalizeDay(filterTimeTo);
+
+          switch (filter.operator) {
+            case 'equals':
+              return itemDay === filterDay;
+            case 'notEquals':
+              return itemDay !== filterDay;
+            case 'before':
+            case 'lt':
+              return itemDay < filterDay;
+            case 'after':
+            case 'gt':
+              return itemDay > filterDay;
+            case 'between':
+              return (
+                (!filter.value || itemDay >= filterDay) &&
+                (!filter.valueTo || itemDay <= filterDayTo)
+              );
+            default:
+              return true;
+          }
+        }
+
+        // 3. String / Dropdown comparison
+        const strVal = String(rawValue).toLowerCase().trim();
+        const targetStr = filter.value.toLowerCase().trim();
+
+        switch (filter.operator) {
+          case 'equals':
+            return strVal === targetStr;
+          case 'notEquals':
+            return strVal !== targetStr;
+          case 'startsWith':
+            return strVal.startsWith(targetStr);
+          case 'endsWith':
+            return strVal.endsWith(targetStr);
+          case 'contains':
+          default:
+            return strVal.includes(targetStr);
+        }
+      });
+    });
+  }, [purchases, filters]);
 
   const openEditModal = (item: PurchaseItem, field: string) => {
     setEditItem(item);
@@ -360,6 +503,95 @@ const Purchase = () => {
     }
   };
 
+  const renderFilterControl = (field: string) => {
+    const definition = fieldDefinitions.find((item) => item.name === field);
+    const type = definition?.type ?? 'text';
+    const currentFilter = filters[field] || {
+      operator: type === 'number' ? 'equals' : type === 'date' ? 'equals' : 'contains',
+      value: '',
+      valueTo: '',
+    };
+
+    return (
+      <div className={styles.filterControl}>
+        <select
+          className={styles.filterSelect}
+          value={currentFilter.operator}
+          onChange={(e) => handleFilterChange(field, 'operator', e.target.value as FilterOperator)}
+        >
+          {type === 'text' && (
+            <>
+              <option value="contains">Contains</option>
+              <option value="equals">Equals</option>
+              <option value="notEquals">Not Equal</option>
+              <option value="startsWith">Starts With</option>
+              <option value="endsWith">Ends With</option>
+            </>
+          )}
+          {type === 'number' && (
+            <>
+              <option value="equals">=</option>
+              <option value="notEquals">≠</option>
+              <option value="gt">&gt;</option>
+              <option value="gte">&ge;</option>
+              <option value="lt">&lt;</option>
+              <option value="lte">&le;</option>
+              <option value="between">Range</option>
+            </>
+          )}
+          {type === 'date' && (
+            <>
+              <option value="equals">On</option>
+              <option value="before">Before</option>
+              <option value="after">After</option>
+              <option value="between">Between</option>
+            </>
+          )}
+          {type === 'select' && (
+            <>
+              <option value="equals">Equals</option>
+              <option value="notEquals">Not Equal</option>
+            </>
+          )}
+        </select>
+
+        {type === 'select' ? (
+          <select
+            className={styles.filterInput}
+            value={currentFilter.value}
+            onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
+          >
+            <option value="">All</option>
+            {statusOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className={styles.filterInputsGroup}>
+            <input
+              type={type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'}
+              className={styles.filterInput}
+              placeholder={currentFilter.operator === 'between' ? 'Min / From' : 'Search...'}
+              value={currentFilter.value}
+              onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
+            />
+            {currentFilter.operator === 'between' && (
+              <input
+                type={type === 'number' ? 'number' : 'date'}
+                className={styles.filterInput}
+                placeholder={type === 'number' ? 'Max' : 'To'}
+                value={currentFilter.valueTo ?? ''}
+                onChange={(e) => handleFilterChange(field, 'valueTo', e.target.value)}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const RenderTable = () => {
     if (loading) {
       return <div className={styles.empty}>Loading...</div>;
@@ -374,39 +606,57 @@ const Purchase = () => {
           <thead>
             <tr>
               {columns.map((column) => (
-                <th key={column}>{column}</th>
+                <th key={column}>{fieldLabelMap[column] ?? column}</th>
               ))}
               {canEditItems && <th>Actions</th>}
             </tr>
+            {showFilterRow && (
+              <tr className={styles.filterRow}>
+                {columns.map((column) => (
+                  <th key={`filter-${column}`}>{renderFilterControl(column)}</th>
+                ))}
+                {canEditItems && <th></th>}
+              </tr>
+            )}
           </thead>
           <tbody>
-            {purchases.map((item) => {
-              const itemId = item._id ?? item.id ?? '';
-              return (
-                <tr key={itemId || Math.random().toString()}>
-                  {columns.map((column) => (
-                    <td key={`${itemId}-${column}`} className={styles.cell}>
-                      <div className={styles.cellValue}>{formatCellValue(column, item[column])}</div>
-                      {canEditItems && (
-                        <button
-                          type="button"
-                          className={styles.cellEdit}
-                          onClick={() => openEditModal(item, column)}
-                        >
-                          <FaPencilAlt size={20} color="#ffffff" className={styles.cellEditIcon} />
-                        </button>
-                      )}
-                    </td>
-                  ))}
-                  {canEditItems && <td></td>}
-                </tr>
-              );
-            })}
+            {filteredPurchases.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + (canEditItems ? 1 : 0)} className={styles.empty}>
+                  No matching items found.
+                </td>
+              </tr>
+            ) : (
+              filteredPurchases.map((item) => {
+                const itemId = item._id ?? item.id ?? '';
+                return (
+                  <tr key={itemId || Math.random().toString()}>
+                    {columns.map((column) => (
+                      <td key={`${itemId}-${column}`} className={styles.cell}>
+                        <div className={styles.cellValue}>{formatCellValue(column, item[column])}</div>
+                        {canEditItems && (
+                          <button
+                            type="button"
+                            className={styles.cellEdit}
+                            onClick={() => openEditModal(item, column)}
+                          >
+                            <FaPencilAlt size={16} color="#ffffff" className={styles.cellEditIcon} />
+                          </button>
+                        )}
+                      </td>
+                    ))}
+                    {canEditItems && <td></td>}
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
     );
   };
+
+  const hasActiveFilters = Object.keys(filters).length > 0;
 
   return (
     <main className={styles.purchase}>
@@ -417,6 +667,22 @@ const Purchase = () => {
             <p>Review and manage purchase entries.</p>
           </div>
           <div className={styles.actions}>
+            <button
+              type="button"
+              className={showFilterRow ? styles.activeFilterButton : styles.secondaryButton}
+              onClick={() => setShowFilterRow((prev) => !prev)}
+            >
+              <FaFilter size={14} style={{ marginRight: '6px' }} />
+              {showFilterRow ? 'Hide Filters' : 'Filter Columns'}
+            </button>
+
+            {hasActiveFilters && (
+              <button type="button" className={styles.clearFilterButton} onClick={clearFilters}>
+                <FaTimes size={14} style={{ marginRight: '6px' }} />
+                Clear Filters
+              </button>
+            )}
+
             {isAdmin && (
               <button type="button" className={styles.createButton} onClick={openManageAccess}>
                 Manage Access
@@ -431,7 +697,7 @@ const Purchase = () => {
 
         {error && <div className={styles.error}>{error}</div>}
 
-        <RenderTable/>
+        <RenderTable />
       </section>
 
       {showEditModal && editItem && (
@@ -546,8 +812,7 @@ const Purchase = () => {
                   checked={viewAccess}
                   onChange={(e) => {
                     setViewAccess(e.target.checked);
-                    // Match the backend logic: if they can't view, they can't edit
-                    if (!e.target.checked) setEditAccess(false); 
+                    if (!e.target.checked) setEditAccess(false);
                   }}
                 />
                 <span>View Access</span>
