@@ -4,5 +4,5 @@ import Users from "./users/Users";
 
 import Purchase from "./purchase/Purchase";
 import PurchaseNew from "./purchase/PurchaseNew";
-
-export {Home, Register, Users, Purchase, PurchaseNew};
+import Location from "./location/Location";
+export {Home, Register, Users, Purchase, PurchaseNew,Location};
