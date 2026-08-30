@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
-import { FaPencilAlt, FaFilter, FaTimes } from 'react-icons/fa';
+import { FaPencilAlt, FaFilter, FaTimes, FaMapMarkerAlt } from 'react-icons/fa';
 
 type User = {
   userId?: string;
@@ -15,32 +15,26 @@ type User = {
   role?: string;
   viewaccess?: string[];
   editaccess?: string[];
+  location?: any;
+  locations?: any[];
 };
 
 const getEntityId = (value: unknown): string | null => {
-  if (typeof value === 'string') {
-    return value;
-  }
-
+  if (typeof value === 'string') return value;
   if (value && typeof value === 'object') {
     const entity = value as { userId?: unknown; _id?: unknown; id?: unknown };
-    if (typeof entity.userId === 'string') {
-      return entity.userId;
-    }
-    if (typeof entity._id === 'string') {
-      return entity._id;
-    }
-    if (typeof entity.id === 'string') {
-      return entity.id;
-    }
+    return (
+      (typeof entity.userId === 'string' && entity.userId) ||
+      (typeof entity._id === 'string' && entity._id) ||
+      (typeof entity.id === 'string' && entity.id) ||
+      null
+    );
   }
-
   return null;
 };
 
-const hasDepartmentAccess = (access: string[] | undefined, department: string) => (
-  (access ?? []).some((departmentName) => departmentName.trim().toLowerCase() === department.trim().toLowerCase())
-);
+const hasDepartmentAccess = (access: string[] | undefined, department: string) =>
+  (access ?? []).some((departmentName) => departmentName.trim().toLowerCase() === department.trim().toLowerCase());
 
 const PURCHASE_DEPARTMENT = 'Purchase';
 
@@ -61,6 +55,7 @@ type PurchaseItem = {
   invoicedate?: string;
   receiptdate?: string;
   receivedqty?: number;
+  location?: any;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -98,13 +93,12 @@ const fieldDefinitions = [
   { name: 'amount', label: 'Amount', type: 'number' },
   { name: 'invoicenumber', label: 'Invoice Number', type: 'text' },
   { name: 'invoicedate', label: 'Invoice Date', type: 'date' },
-  { name: 'receiptdate', label: 'Receipt Date', type: 'text' },
+  { name: 'receiptdate', label: 'Receipt Date', type: 'date' },
   { name: 'receivedqty', label: 'Received Quantity', type: 'number' },
 ] as const;
 
 const fieldLabelMap = Object.fromEntries(fieldDefinitions.map((field) => [field.name, field.label]));
 
-// --- Filter Type Definitions ---
 export type FilterOperator =
   | 'contains'
   | 'equals'
@@ -122,15 +116,21 @@ export type FilterOperator =
 export interface ColumnFilter {
   operator: FilterOperator;
   value: string;
-  valueTo?: string; // For range/between operations
+  valueTo?: string;
 }
 
 const formatCellValue = (field: string, value: unknown) => {
-  if (value === undefined || value === null || value === '') {
-    return '-';
+  if (value === undefined || value === null || value === '') return '-';
+
+  if (field === 'location') {
+    if (typeof value === 'object' && value !== null) {
+      return (value as any).name || (value as any)._id || '-';
+    }
+    return String(value);
   }
 
-  if ((field === 'date' || field === 'invoicedate') && typeof value === 'string') {
+  const definition = fieldDefinitions.find((f) => f.name === field);
+  if (definition?.type === 'date' && typeof value === 'string') {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
   }
@@ -139,9 +139,7 @@ const formatCellValue = (field: string, value: unknown) => {
 };
 
 const normalizeFieldValue = (field: string, value: string) => {
-  if (value === '') {
-    return undefined;
-  }
+  if (value === '') return undefined;
 
   const definition = fieldDefinitions.find((item) => item.name === field);
   if (definition?.type === 'number') {
@@ -162,6 +160,14 @@ const Purchase = () => {
   const [showFilterRow, setShowFilterRow] = useState(false);
   const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
 
+  // --- Location State ---
+  const [userLocation, setUserLocation] = useState<string | string[] | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
+    return localStorage.getItem('hbus_selected_location_id') || 'ALL';
+  });
+  const [availableLocations, setAvailableLocations] = useState<any[]>([]);
+
+  // --- Modal States ---
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<PurchaseItem | null>(null);
   const [editField, setEditField] = useState<string>('');
@@ -175,42 +181,60 @@ const Purchase = () => {
   const [editAccess, setEditAccess] = useState(false);
 
   const role = localStorage.getItem('hbus_user_role');
-  const isAdmin = role === 'A' || role === 'B';
+  const isTypeA = role === 'A';
+  const isAdmin = isTypeA || role === 'B';
   const [canEditItems, setCanEditItems] = useState<boolean>(isAdmin);
 
+  // Fetch current logged-in user context
+  useEffect(() => {
+    const currentUserId = localStorage.getItem('hbus_user_id') || localStorage.getItem('userId');
+
+    if (currentUserId) {
+      axios
+        .get(`${import.meta.env.VITE_APP_API}/api/users/${currentUserId}`)
+        .then((res) => {
+          const userData = res.data;
+          const loc = userData?.location;
+          
+          if (!isTypeA && loc) {
+            const locId = typeof loc === 'object' ? loc._id : loc;
+            setUserLocation(locId);
+          }
+
+          if (!isAdmin && hasDepartmentAccess(userData?.editaccess, PURCHASE_DEPARTMENT)) {
+            setCanEditItems(true);
+          }
+        })
+        .catch((err) => console.error('Failed to fetch user context.', err));
+    }
+  }, [isAdmin, isTypeA]);
+
+  // Read edit permission fallback from local storage
   useEffect(() => {
     if (!isAdmin) {
       try {
         const storedEditAccess = JSON.parse(localStorage.getItem('hbus_user_editaccess') || '[]');
         if (hasDepartmentAccess(storedEditAccess, PURCHASE_DEPARTMENT)) {
           setCanEditItems(true);
-          return;
         }
       } catch (e) {
-        // Ignore JSON parse errors
-      }
-
-      const currentUserId = localStorage.getItem('hbus_user_id') || localStorage.getItem('userId');
-      if (currentUserId) {
-        axios.get(`${import.meta.env.VITE_APP_API}/api/users/${currentUserId}`)
-          .then((res) => {
-            if (hasDepartmentAccess(res.data?.editaccess, PURCHASE_DEPARTMENT)) {
-              setCanEditItems(true);
-            }
-          })
-          .catch((err) => console.error('Failed to fetch logged in user access.', err));
+        // Ignore JSON parse error
       }
     }
   }, [isAdmin]);
 
-  const selectedUserHasViewAccess = Boolean(
-    selectedUser && hasDepartmentAccess(selectedUser.viewaccess, PURCHASE_DEPARTMENT),
-  );
-  const selectedUserHasEditAccess = Boolean(
-    selectedUser && hasDepartmentAccess(selectedUser.editaccess, PURCHASE_DEPARTMENT),
-  );
-
   const columns = visibleFields;
+
+  const loadLocations = async () => {
+    try {
+      const baseUrl = import.meta.env.VITE_APP_API;
+      const response = await axios.get(`${baseUrl}/api/location`);
+      const rawData = response.data.data || response.data;
+      setAvailableLocations(Array.isArray(rawData) ? rawData : []);
+    } catch (err) {
+      console.error('Failed to load available locations.', err);
+    }
+  };
 
   const loadPurchases = async () => {
     setLoading(true);
@@ -218,7 +242,8 @@ const Purchase = () => {
       await toast.promise(
         (async () => {
           const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases`);
-          setPurchases(Array.isArray(response.data) ? response.data : []);
+          const data: PurchaseItem[] = Array.isArray(response.data) ? response.data : [];
+          setPurchases(data);
           setError(null);
         })(),
         {
@@ -234,108 +259,137 @@ const Purchase = () => {
     }
   };
 
+  useEffect(() => {
+    loadPurchases();
+    loadLocations();
+  }, []);
+
+  const handleLocationChange = (newLocId: string) => {
+    setSelectedLocationId(newLocId);
+    if (newLocId === 'ALL') {
+      localStorage.removeItem('hbus_selected_location_id');
+    } else {
+      localStorage.setItem('hbus_selected_location_id', newLocId);
+    }
+  };
+
   const loadUsers = async () => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
-      const allUsers = Array.isArray(response.data) ? response.data as User[] : [];
-      setUsers(allUsers.filter((user) => user.role === 'C' || user.role === 'D'));
-    } catch {
-      toast.error('Failed to load users.');
+      setUsers(Array.isArray(response.data) ? response.data : []);
+    } catch (err) {
+      toast.error('Failed to load user list.');
     }
   };
 
   const openManageAccess = async () => {
-    setShowAccessModal(true);
     await loadUsers();
+    setShowAccessModal(true);
   };
 
-  const openAccessModal = async (user: User) => {
-    const userId = getEntityId(user);
-    if (!userId) {
-      toast.error('Unable to identify the user.');
-      return;
-    }
-
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users/${userId}`);
-      const userData = response.data as User;
-      setSelectedUser(userData);
-      setViewAccess(hasDepartmentAccess(userData.viewaccess, PURCHASE_DEPARTMENT));
-      setEditAccess(hasDepartmentAccess(userData.editaccess, PURCHASE_DEPARTMENT));
-
-      setShowAccessCheckModal(true);
-    } catch {
-      toast.error('Failed to load user access.');
-    }
+  const openAccessModal = (user: User) => {
+    setSelectedUser(user);
+    setViewAccess(hasDepartmentAccess(user.viewaccess, PURCHASE_DEPARTMENT));
+    setEditAccess(hasDepartmentAccess(user.editaccess, PURCHASE_DEPARTMENT));
+    setShowAccessCheckModal(true);
   };
 
   const closeAccessCheckModal = () => {
-    setShowAccessCheckModal(false);
     setSelectedUser(null);
-    setViewAccess(false);
-    setEditAccess(false);
+    setShowAccessCheckModal(false);
   };
 
   const saveAccessChanges = async () => {
     if (!selectedUser) return;
+    const userId = getEntityId(selectedUser);
+    if (!userId) {
+      toast.error('Invalid user selected.');
+      return;
+    }
 
     try {
-      const userId = getEntityId(selectedUser);
-      if (!userId) {
-        toast.error('User ID not found.');
-        return;
-      }
+      const currentView = selectedUser.viewaccess || [];
+      const currentEdit = selectedUser.editaccess || [];
 
-      const requests: Promise<unknown>[] = [];
+      const updatedView = viewAccess
+        ? Array.from(new Set([...currentView, PURCHASE_DEPARTMENT]))
+        : currentView.filter((d) => d.trim().toLowerCase() !== PURCHASE_DEPARTMENT.toLowerCase());
 
-      if (viewAccess && !selectedUserHasViewAccess) {
-        requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
-          department: PURCHASE_DEPARTMENT,
-          access: 'view',
-        }));
-      } else if (!viewAccess && selectedUserHasViewAccess) {
-        requests.push(axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
-          data: { department: PURCHASE_DEPARTMENT, access: 'view' },
-        }));
-      }
+      const updatedEdit = editAccess
+        ? Array.from(new Set([...currentEdit, PURCHASE_DEPARTMENT]))
+        : currentEdit.filter((d) => d.trim().toLowerCase() !== PURCHASE_DEPARTMENT.toLowerCase());
 
-      if (editAccess && !selectedUserHasEditAccess) {
-        requests.push(axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
-          department: PURCHASE_DEPARTMENT,
-          access: 'edit',
-        }));
-      } else if (!editAccess && selectedUserHasEditAccess) {
-        requests.push(axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
-          data: { department: PURCHASE_DEPARTMENT, access: 'edit' },
-        }));
-      }
+      await axios.put(`${import.meta.env.VITE_APP_API}/api/users/${userId}/access`, {
+        viewaccess: updatedView,
+        editaccess: updatedEdit,
+      });
 
-      if (requests.length === 0) {
-        toast.info('No access changes to save.');
-        return;
-      }
-
-      await toast.promise(
-        Promise.all(requests),
-        {
-          loading: 'Saving access changes...',
-          success: 'Access updated successfully.',
-          error: 'Failed to update access.',
-        },
-      );
-
-      await loadUsers();
+      toast.success('User access permissions updated.');
       closeAccessCheckModal();
-    } catch {
-      // Error is caught and shown by toast.promise
+      loadUsers();
+    } catch (err) {
+      toast.error('Failed to update access settings.');
     }
   };
 
-  useEffect(() => {
-    loadPurchases();
-  }, []);
+  const openEditModal = (item: PurchaseItem, field: string) => {
+    if (!canEditItems) return;
+    setEditItem(item);
+    setEditField(field);
 
-  // --- Filter Logic ---
+    let initialVal = item[field] !== undefined && item[field] !== null ? String(item[field]) : '';
+    const definition = fieldDefinitions.find((f) => f.name === field);
+    if (definition?.type === 'date' && initialVal) {
+      const parsedDate = new Date(initialVal);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        initialVal = parsedDate.toISOString().split('T')[0];
+      }
+    }
+
+    setEditValue(initialVal);
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setEditItem(null);
+    setEditField('');
+    setEditValue('');
+    setShowEditModal(false);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editItem || !editField) return;
+
+    const itemId = getEntityId(editItem);
+    if (!itemId) {
+      toast.error('Item identifier not found.');
+      return;
+    }
+
+    const payloadValue = normalizeFieldValue(editField, editValue);
+
+    try {
+      await toast.promise(
+        axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${itemId}`, {
+          [editField]: payloadValue,
+        }),
+        {
+          loading: 'Updating record...',
+          success: 'Record updated successfully.',
+          error: 'Failed to update record.',
+        },
+      );
+
+      setPurchases((prev) =>
+        prev.map((item) => (getEntityId(item) === itemId ? { ...item, [editField]: payloadValue } : item)),
+      );
+      closeEditModal();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleFilterChange = (field: string, key: keyof ColumnFilter, value: string) => {
     setFilters((prev) => {
       const currentFilter = prev[field] || { operator: 'contains', value: '' };
@@ -356,6 +410,29 @@ const Purchase = () => {
 
   const filteredPurchases = useMemo(() => {
     return purchases.filter((item) => {
+      // 1. Role / Location Filter Rules
+      const itemLocRaw = item.location;
+      const itemLocId = typeof itemLocRaw === 'object' && itemLocRaw !== null ? getEntityId(itemLocRaw) : String(itemLocRaw || '');
+
+      if (isTypeA) {
+        if (selectedLocationId !== 'ALL') {
+          if (itemLocId !== selectedLocationId) {
+            return false;
+          }
+        }
+      } else if (userLocation) {
+        if (typeof userLocation === 'string') {
+          if (itemLocId !== userLocation) {
+            return false;
+          }
+        } else if (Array.isArray(userLocation)) {
+          if (!userLocation.includes(itemLocId!)) {
+            return false;
+          }
+        }
+      }
+
+      // 2. Dynamic Table Column Filters
       return Object.entries(filters).every(([field, filter]) => {
         if (!filter || (!filter.value && !filter.valueTo)) return true;
 
@@ -367,7 +444,6 @@ const Purchase = () => {
           return false;
         }
 
-        // 1. Number comparison
         if (fieldType === 'number') {
           const numVal = Number(rawValue);
           const valFrom = Number(filter.value);
@@ -389,16 +465,12 @@ const Purchase = () => {
             case 'lte':
               return numVal <= valFrom;
             case 'between':
-              return (
-                (!filter.value || numVal >= valFrom) &&
-                (!filter.valueTo || numVal <= valTo)
-              );
+              return (!filter.value || numVal >= valFrom) && (!filter.valueTo || numVal <= valTo);
             default:
               return true;
           }
         }
 
-        // 2. Date comparison
         if (fieldType === 'date') {
           const itemTime = new Date(rawValue).getTime();
           const filterTime = new Date(filter.value).getTime();
@@ -427,16 +499,12 @@ const Purchase = () => {
             case 'gt':
               return itemDay > filterDay;
             case 'between':
-              return (
-                (!filter.value || itemDay >= filterDay) &&
-                (!filter.valueTo || itemDay <= filterDayTo)
-              );
+              return (!filter.value || itemDay >= filterDay) && (!filter.valueTo || itemDay <= filterDayTo);
             default:
               return true;
           }
         }
 
-        // 3. String / Dropdown comparison
         const strVal = String(rawValue).toLowerCase().trim();
         const targetStr = filter.value.toLowerCase().trim();
 
@@ -455,209 +523,162 @@ const Purchase = () => {
         }
       });
     });
-  }, [purchases, filters]);
-
-  const openEditModal = (item: PurchaseItem, field: string) => {
-    setEditItem(item);
-    setEditField(field);
-    setEditValue(String(item[field] ?? ''));
-    setShowEditModal(true);
-  };
-
-  const closeEditModal = () => {
-    setShowEditModal(false);
-    setEditItem(null);
-    setEditField('');
-    setEditValue('');
-  };
-
-  const handleEditSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!editItem) {
-      return;
-    }
-
-    const itemId = editItem._id ?? editItem.id;
-    if (!itemId) {
-      setError('Unable to edit purchase item: missing ID.');
-      return;
-    }
-
-    try {
-      await toast.promise(
-        (async () => {
-          await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${itemId}`, {
-            [editField]: normalizeFieldValue(editField, editValue),
-          });
-          await loadPurchases();
-          closeEditModal();
-        })(),
-        {
-          loading: 'Saving changes...',
-          success: 'Purchase updated.',
-          error: 'Failed to update purchase.',
-        },
-      );
-    } catch {
-      setError('Failed to update purchase.');
-    }
-  };
+  }, [purchases, filters, isTypeA, selectedLocationId, userLocation]);
 
   const renderFilterControl = (field: string) => {
-    const definition = fieldDefinitions.find((item) => item.name === field);
-    const type = definition?.type ?? 'text';
-    const currentFilter = filters[field] || {
-      operator: type === 'number' ? 'equals' : type === 'date' ? 'equals' : 'contains',
-      value: '',
-      valueTo: '',
-    };
+    const definition = fieldDefinitions.find((f) => f.name === field);
+    const fieldType = definition?.type ?? 'text';
+    const filter = filters[field] || { operator: 'contains', value: '' };
+
+    if (fieldType === 'number') {
+      return (
+        <div className={styles.filterControlGroup}>
+          <select
+            className={styles.filterSelect}
+            value={filter.operator}
+            onChange={(e) => handleFilterChange(field, 'operator', e.target.value as FilterOperator)}
+          >
+            <option value="equals">=</option>
+            <option value="notEquals">!=</option>
+            <option value="gt">&gt;</option>
+            <option value="gte">&gt;=</option>
+            <option value="lt">&lt;</option>
+            <option value="lte">&lt;=</option>
+            <option value="between">Between</option>
+          </select>
+          <input
+            type="number"
+            className={styles.filterInput}
+            placeholder="Val"
+            value={filter.value || ''}
+            onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
+          />
+          {filter.operator === 'between' && (
+            <input
+              type="number"
+              className={styles.filterInput}
+              placeholder="To"
+              value={filter.valueTo || ''}
+              onChange={(e) => handleFilterChange(field, 'valueTo', e.target.value)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    if (fieldType === 'date') {
+      return (
+        <div className={styles.filterControlGroup}>
+          <select
+            className={styles.filterSelect}
+            value={filter.operator}
+            onChange={(e) => handleFilterChange(field, 'operator', e.target.value as FilterOperator)}
+          >
+            <option value="equals">On</option>
+            <option value="before">Before</option>
+            <option value="after">After</option>
+            <option value="between">Between</option>
+          </select>
+          <input
+            type="date"
+            className={styles.filterInput}
+            value={filter.value || ''}
+            onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
+          />
+          {filter.operator === 'between' && (
+            <input
+              type="date"
+              className={styles.filterInput}
+              value={filter.valueTo || ''}
+              onChange={(e) => handleFilterChange(field, 'valueTo', e.target.value)}
+            />
+          )}
+        </div>
+      );
+    }
 
     return (
-      <div className={styles.filterControl}>
+      <div className={styles.filterControlGroup}>
         <select
           className={styles.filterSelect}
-          value={currentFilter.operator}
+          value={filter.operator}
           onChange={(e) => handleFilterChange(field, 'operator', e.target.value as FilterOperator)}
         >
-          {type === 'text' && (
-            <>
-              <option value="contains">Contains</option>
-              <option value="equals">Equals</option>
-              <option value="notEquals">Not Equal</option>
-              <option value="startsWith">Starts With</option>
-              <option value="endsWith">Ends With</option>
-            </>
-          )}
-          {type === 'number' && (
-            <>
-              <option value="equals">=</option>
-              <option value="notEquals">≠</option>
-              <option value="gt">&gt;</option>
-              <option value="gte">&ge;</option>
-              <option value="lt">&lt;</option>
-              <option value="lte">&le;</option>
-              <option value="between">Range</option>
-            </>
-          )}
-          {type === 'date' && (
-            <>
-              <option value="equals">On</option>
-              <option value="before">Before</option>
-              <option value="after">After</option>
-              <option value="between">Between</option>
-            </>
-          )}
-          {type === 'select' && (
-            <>
-              <option value="equals">Equals</option>
-              <option value="notEquals">Not Equal</option>
-            </>
-          )}
+          <option value="contains">Contains</option>
+          <option value="equals">Equals</option>
+          <option value="startsWith">Starts With</option>
+          <option value="endsWith">Ends With</option>
         </select>
+        <input
+          type="text"
+          className={styles.filterInput}
+          placeholder="Search..."
+          value={filter.value || ''}
+          onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
+        />
+      </div>
+    );
+  };
 
-        {type === 'select' ? (
-          <select
-            className={styles.filterInput}
-            value={currentFilter.value}
-            onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
-          >
-            <option value="">All</option>
-            {statusOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
+  const RenderTable = () => (
+    <div className={styles.tableWrapper}>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            {columns.map((col) => (
+              <th key={col}>{fieldLabelMap[col] || col}</th>
             ))}
-          </select>
-        ) : (
-          <div className={styles.filterInputsGroup}>
-            <input
-              type={type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'}
-              className={styles.filterInput}
-              placeholder={currentFilter.operator === 'between' ? 'Min / From' : 'Search...'}
-              value={currentFilter.value}
-              onChange={(e) => handleFilterChange(field, 'value', e.target.value)}
-            />
-            {currentFilter.operator === 'between' && (
-              <input
-                type={type === 'number' ? 'number' : 'date'}
-                className={styles.filterInput}
-                placeholder={type === 'number' ? 'Max' : 'To'}
-                value={currentFilter.valueTo ?? ''}
-                onChange={(e) => handleFilterChange(field, 'valueTo', e.target.value)}
-              />
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const RenderTable = () => {
-    if (loading) {
-      return <div className={styles.empty}>Loading...</div>;
-    }
-    if (purchases.length === 0) {
-      return <div className={styles.empty}>No purchases found.</div>;
-    }
-
-    return (
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th key={column}>{fieldLabelMap[column] ?? column}</th>
+          </tr>
+          {showFilterRow && (
+            <tr className={styles.filterRow}>
+              {columns.map((col) => (
+                <th key={`filter-${col}`}>{renderFilterControl(col)}</th>
               ))}
-              {canEditItems && <th>Actions</th>}
             </tr>
-            {showFilterRow && (
-              <tr className={styles.filterRow}>
-                {columns.map((column) => (
-                  <th key={`filter-${column}`}>{renderFilterControl(column)}</th>
+          )}
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr>
+              <td colSpan={columns.length} className={styles.noData}>
+                Loading purchases...
+              </td>
+            </tr>
+          ) : filteredPurchases.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length} className={styles.noData}>
+                No purchase items match the criteria.
+              </td>
+            </tr>
+          ) : (
+            filteredPurchases.map((item, index) => (
+              <tr key={getEntityId(item) || index}>
+                {columns.map((col) => (
+                  <td key={col}>
+                    <div className={styles.cellContent}>
+                      <span>{formatCellValue(col, item[col])}</span>
+                      {canEditItems && (
+                        <button
+                          type="button"
+                          className={styles.inlineEditButton}
+                          onClick={() => openEditModal(item, col)}
+                          title={`Edit ${fieldLabelMap[col] || col}`}
+                        >
+                          <FaPencilAlt size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 ))}
-                {canEditItems && <th></th>}
               </tr>
-            )}
-          </thead>
-          <tbody>
-            {filteredPurchases.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length + (canEditItems ? 1 : 0)} className={styles.empty}>
-                  No matching items found.
-                </td>
-              </tr>
-            ) : (
-              filteredPurchases.map((item) => {
-                const itemId = item._id ?? item.id ?? '';
-                return (
-                  <tr key={itemId || Math.random().toString()}>
-                    {columns.map((column) => (
-                      <td key={`${itemId}-${column}`} className={styles.cell}>
-                        <div className={styles.cellValue}>{formatCellValue(column, item[column])}</div>
-                        {canEditItems && (
-                          <button
-                            type="button"
-                            className={styles.cellEdit}
-                            onClick={() => openEditModal(item, column)}
-                          >
-                            <FaPencilAlt size={16} color="#ffffff" className={styles.cellEditIcon} />
-                          </button>
-                        )}
-                      </td>
-                    ))}
-                    {canEditItems && <td></td>}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 
   const hasActiveFilters = Object.keys(filters).length > 0;
-
   return (
     <main className={styles.purchase}>
       <section className={styles.card}>
@@ -667,6 +688,31 @@ const Purchase = () => {
             <p>Review and manage purchase entries.</p>
           </div>
           <div className={styles.actions}>
+            {isTypeA && (
+              <div className={styles.locationSelector}>
+                <FaMapMarkerAlt size={14} style={{ marginRight: '6px' }} />
+                <select
+                  className={styles.selectInput}
+                  value={selectedLocationId}
+                  onChange={(e) => handleLocationChange(e.target.value)}
+                >
+                  <option value="ALL">All Locations</option>
+                  {availableLocations.map((loc, idx) => {
+                    const locId = loc._id || loc.id;
+                    const locName = typeof loc === 'object' ? (loc.name || '') : String(loc);
+                    
+                    if (!locId || !locName) return null;
+                    
+                    return (
+                      <option key={locId || idx} value={locId}>
+                        {locName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
             <button
               type="button"
               className={showFilterRow ? styles.activeFilterButton : styles.secondaryButton}
@@ -691,7 +737,9 @@ const Purchase = () => {
             <button type="button" className={styles.createButton} onClick={() => navigate('/purchase/new')}>
               Create
             </button>
-            <button type="button" className={styles.backButton} onClick={() => navigate('/')}>Home</button>
+            <button type="button" className={styles.backButton} onClick={() => navigate('/')}>
+              Home
+            </button>
           </div>
         </div>
 
@@ -700,42 +748,42 @@ const Purchase = () => {
         <RenderTable />
       </section>
 
+      {/* Edit Field Modal */}
       {showEditModal && editItem && (
-        <div className={styles.modalBackdrop}>
+        <div className={styles.modalOverlay}>
           <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <h2>Edit {editField}</h2>
-              <button type="button" className={styles.closeButton} onClick={closeEditModal}>
-                ×
-              </button>
-            </div>
-            <form onSubmit={handleEditSubmit} className={styles.form}>
-              <label className={styles.field}>
-                <span>{fieldLabelMap[editField] ?? editField}</span>
+            <h2>Edit {fieldLabelMap[editField] || editField}</h2>
+            <form onSubmit={handleEditSubmit}>
+              <div className={styles.formGroup}>
+                <label>{fieldLabelMap[editField] || editField}</label>
                 {editField === 'status' ? (
-                  <select value={editValue} onChange={(event) => setEditValue(event.target.value)} required>
+                  <select
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className={styles.selectInput}
+                  >
                     <option value="">Select status</option>
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
+                    {statusOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
                       </option>
                     ))}
                   </select>
                 ) : (
                   <input
-                    type={fieldDefinitions.find((item) => item.name === editField)?.type ?? 'text'}
+                    type={fieldDefinitions.find((f) => f.name === editField)?.type || 'text'}
                     value={editValue}
-                    onChange={(event) => setEditValue(event.target.value)}
-                    required
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className={styles.textInput}
                   />
                 )}
-              </label>
+              </div>
               <div className={styles.modalActions}>
                 <button type="button" className={styles.secondaryButton} onClick={closeEditModal}>
                   Cancel
                 </button>
-                <button type="submit" className={styles.primaryButton}>
-                  Save
+                <button type="submit" className={styles.createButton}>
+                  Save Changes
                 </button>
               </div>
             </form>
@@ -743,46 +791,24 @@ const Purchase = () => {
         </div>
       )}
 
+      {/* Manage Access User List Modal */}
       {showAccessModal && (
-        <div className={styles.modalBackdrop}>
+        <div className={styles.modalOverlay}>
           <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <h2>Manage User Access</h2>
-              <button type="button" className={styles.closeButton} onClick={() => setShowAccessModal(false)}>
-                ×
-              </button>
-            </div>
-            <div className={styles.accessList}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={getEntityId(user) ?? user.email}>
-                      <td>{user.name || '-'}</td>
-                      <td>{user.email || '-'}</td>
-                      <td>{user.role || '-'}</td>
-                      <td>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            className={styles.primaryButton}
-                            onClick={() => openAccessModal(user)}
-                          >
-                            Access
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <h2>Manage User Access</h2>
+            <p className={styles.modalSub}>Select a user to modify department access permissions.</p>
+            <div className={styles.userList}>
+              {users.map((u) => (
+                <div key={getEntityId(u) || u.email} className={styles.userItem}>
+                  <div>
+                    <strong>{u.name || u.email}</strong>
+                    <span className={styles.userEmail}>{u.email}</span>
+                  </div>
+                  <button type="button" className={styles.secondaryButton} onClick={() => openAccessModal(u)}>
+                    Edit Access
+                  </button>
+                </div>
+              ))}
             </div>
             <div className={styles.modalActions}>
               <button type="button" className={styles.secondaryButton} onClick={() => setShowAccessModal(false)}>
@@ -793,45 +819,35 @@ const Purchase = () => {
         </div>
       )}
 
+      {/* Individual Access Level Modal */}
       {showAccessCheckModal && selectedUser && (
-        <div className={styles.modalBackdrop}>
+        <div className={styles.modalOverlay}>
           <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <h2>Access for {selectedUser.name || selectedUser.email}</h2>
-              <button type="button" className={styles.closeButton} onClick={closeAccessCheckModal}>
-                ×
-              </button>
-            </div>
-            <div className={styles.accessCheckboxes}>
-              <p className={styles.accessNote}>
-                Manage this user&apos;s access to the Purchase department.
-              </p>
-              <label className={styles.field}>
+            <h2>Manage Access: {selectedUser.name || selectedUser.email}</h2>
+            <div className={styles.checkboxGroup}>
+              <label className={styles.checkboxLabel}>
                 <input
                   type="checkbox"
                   checked={viewAccess}
-                  onChange={(e) => {
-                    setViewAccess(e.target.checked);
-                    if (!e.target.checked) setEditAccess(false);
-                  }}
+                  onChange={(e) => setViewAccess(e.target.checked)}
                 />
-                <span>View Access</span>
+                View Access (Purchase Department)
               </label>
-              <label className={styles.field}>
+              <label className={styles.checkboxLabel}>
                 <input
                   type="checkbox"
                   checked={editAccess}
                   onChange={(e) => setEditAccess(e.target.checked)}
                 />
-                <span>Edit Access</span>
+                Edit Access (Purchase Department)
               </label>
             </div>
             <div className={styles.modalActions}>
               <button type="button" className={styles.secondaryButton} onClick={closeAccessCheckModal}>
                 Cancel
               </button>
-              <button type="button" className={styles.primaryButton} onClick={saveAccessChanges}>
-                Save Changes
+              <button type="button" className={styles.createButton} onClick={saveAccessChanges}>
+                Save Permissions
               </button>
             </div>
           </div>
