@@ -17,17 +17,17 @@ const fieldDefinitions: FieldDef[] = [
   { name: 'PONumber', label: 'PO Number', type: 'text', required: true },
   { name: 'supplier', label: 'Supplier', type: 'text', required: false },
   { name: 'item', label: 'Item', type: 'text', required: false },
-  { name: 'gst', label: 'GST (%)', type: 'number', required: false },
+  { name: 'gst', label: 'GST (%)', type: 'text', required: false },
   { name: 'unit', label: 'Unit', type: 'text', required: false },
-  { name: 'rate', label: 'Rate', type: 'number', required: false },
-  { name: 'qty', label: 'Quantity', type: 'number', required: false },
+  { name: 'rate', label: 'Rate', type: 'text', required: false },
+  { name: 'qty', label: 'Quantity', type: 'text', required: false },
   { name: 'date', label: 'Order Date', type: 'datetime-local', required: false },
   { name: 'status', label: 'Status', type: 'select', required: false },
-  { name: 'amount', label: 'Amount', type: 'number', required: false },
+  { name: 'amount', label: 'Amount', type: 'text', required: false },
   { name: 'invoicenumber', label: 'Invoice Number', type: 'text', required: false },
   { name: 'invoicedate', label: 'Invoice Date', type: 'datetime-local', required: false },
-  { name: 'receiptdate', label: 'Receipt Date', type: 'date', required: false },
-  { name: 'receivedqty', label: 'Received Quantity', type: 'number', required: false },
+  { name: 'receiptdate', label: 'Receipt Date', type: 'datetime-local', required: false },
+  { name: 'receivedqty', label: 'Received Quantity', type: 'text', required: false },
 ];
 
 const visibleFields = fieldDefinitions.map((f) => f.name);

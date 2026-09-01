@@ -195,7 +195,7 @@ const Purchase = () => {
         .then((res) => {
           const userData = res.data;
           const loc = userData?.location;
-          
+
           if (!isTypeA && loc) {
             const locId = typeof loc === 'object' ? loc._id : loc;
             setUserLocation(locId);
@@ -390,20 +390,39 @@ const Purchase = () => {
     }
   };
 
-  const handleFilterChange = (field: string, key: keyof ColumnFilter, value: string) => {
+  const handleFilterChange = (
+    field: string,
+    key: keyof ColumnFilter,
+    value: string
+  ) => {
     setFilters((prev) => {
-      const currentFilter = prev[field] || { operator: 'contains', value: '' };
-      const updatedFilter = { ...currentFilter, [key]: value };
+      const currentFilter: ColumnFilter = prev[field] || {
+        operator: 'contains',
+        value: '',
+      };
 
-      if (!updatedFilter.value && !updatedFilter.valueTo) {
+      const updatedFilter: ColumnFilter = {
+        ...currentFilter,
+        [key]: value,
+      };
+
+      // Only remove the filter when the user clears its value,
+      // not when they are changing the operator.
+      if (
+        key !== 'operator' &&
+        !updatedFilter.value &&
+        !updatedFilter.valueTo
+      ) {
         const { [field]: _, ...rest } = prev;
         return rest;
       }
 
-      return { ...prev, [field]: updatedFilter };
+      return {
+        ...prev,
+        [field]: updatedFilter,
+      };
     });
   };
-
   const clearFilters = () => {
     setFilters({});
   };
@@ -700,12 +719,14 @@ const Purchase = () => {
                   {availableLocations.map((loc, idx) => {
                     const locId = loc._id || loc.id;
                     const locName = typeof loc === 'object' ? (loc.name || '') : String(loc);
-                    
+
                     if (!locId || !locName) return null;
-                    
+
                     return (
                       <option key={locId || idx} value={locId}>
-                        {locName}
+                        <span className='bg-[#000000] text-white px-2 py-1 rounded'>
+                          {locName}
+                        </span>
                       </option>
                     );
                   })}
