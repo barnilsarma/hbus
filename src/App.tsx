@@ -14,6 +14,7 @@ function App() {
           <Route path="/purchase" element={<pages.Purchase />} />
           <Route path="/purchase/new" element={<pages.PurchaseNew />} />
           <Route path="/location" element={<pages.Location />} />
+          <Route path="/PO/:id" element={<pages.POFormat />} />
         </Routes>
       </Router>
     </>

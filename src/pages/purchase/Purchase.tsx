@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
 import { FaPencilAlt, FaFilter, FaTimes, FaMapMarkerAlt } from 'react-icons/fa';
@@ -689,6 +689,7 @@ const Purchase = () => {
                     </div>
                   </td>
                 ))}
+                <td><Link to={`/PO/${getEntityId(item)}`} className='text-[#110055] bg-[#ffffff]'>GENERATE PO</Link></td>
               </tr>
             ))
           )}
