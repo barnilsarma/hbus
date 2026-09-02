@@ -16,8 +16,11 @@ type FieldDef = {
 const fieldDefinitions: FieldDef[] = [
   { name: 'PONumber', label: 'PO Number', type: 'text', required: true },
   { name: 'supplier', label: 'Supplier', type: 'text', required: false },
+  { name: 'supplierAddress', label: 'Supplier Address', type: 'text', required: false },
+  { name: 'supplierStateCode', label: 'Supplier State Code', type: 'text', required: false },
   { name: 'item', label: 'Item', type: 'text', required: false },
   { name: 'gst', label: 'GST (%)', type: 'text', required: false },
+  { name: 'gstn', label: 'GSTN', type: 'text', required: false },
   { name: 'unit', label: 'Unit', type: 'text', required: false },
   { name: 'rate', label: 'Rate', type: 'text', required: false },
   { name: 'qty', label: 'Quantity', type: 'text', required: false },

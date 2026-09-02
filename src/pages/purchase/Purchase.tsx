@@ -43,8 +43,11 @@ type PurchaseItem = {
   id?: string;
   PONumber: string;
   supplier?: string;
+  supplierAddress?: string;
+  supplierStateCode?: string;
   item?: string;
   gst?: number;
+  gstn:string;
   unit?: string;
   rate?: number;
   qty?: number;
@@ -64,6 +67,9 @@ type PurchaseItem = {
 const visibleFields = [
   'PONumber',
   'supplier',
+  'supplierAddress',
+  'supplierState',
+  'supplierStateCode',
   'item',
   'gst',
   'unit',
@@ -76,6 +82,7 @@ const visibleFields = [
   'invoicedate',
   'receiptdate',
   'receivedqty',
+  'gstn',
 ];
 
 const statusOptions = ['INCOMPLETE', 'DELAYED', 'COMPLETE'] as const;
@@ -83,8 +90,12 @@ const statusOptions = ['INCOMPLETE', 'DELAYED', 'COMPLETE'] as const;
 const fieldDefinitions = [
   { name: 'PONumber', label: 'PO Number', type: 'text', required: true },
   { name: 'supplier', label: 'Supplier', type: 'text' },
+  { name: 'supplierAddress', label: 'Supplier Address', type: 'text' },
+  { name: 'supplierState', label: 'Supplier State', type: 'text' },
+  { name: 'supplierStateCode', label: 'Supplier State Code', type: 'text' },
   { name: 'item', label: 'Item', type: 'text' },
   { name: 'gst', label: 'GST (%)', type: 'number' },
+  {name: 'gstn', label: 'GSTN', type: 'text' },
   { name: 'unit', label: 'Unit', type: 'text' },
   { name: 'rate', label: 'Rate', type: 'number' },
   { name: 'qty', label: 'Quantity', type: 'number' },
