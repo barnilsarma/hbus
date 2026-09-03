@@ -44,21 +44,17 @@ type PurchaseItem = {
   PONumber: string;
   supplier?: string;
   supplierAddress?: string;
-  supplierStateCode?: string;
-  item?: string;
-  gst?: number;
-  gstn:string;
-  unit?: string;
-  rate?: number;
-  qty?: number;
+  supplierState?: string;
+  supplierStateCode?: number;
+  gstn?: string;
   date?: string;
-  status?: string;
-  amount?: number;
+  status?: 'INCOMPLETE' | 'DELAYED' | 'COMPLETE';
   invoicenumber?: string;
   invoicedate?: string;
   receiptdate?: string;
   receivedqty?: number;
   location?: any;
+  items?: any[]; // References the IItem array
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -70,19 +66,13 @@ const visibleFields = [
   'supplierAddress',
   'supplierState',
   'supplierStateCode',
-  'item',
-  'gst',
-  'unit',
-  'rate',
-  'qty',
+  'gstn',
   'date',
   'status',
-  'amount',
   'invoicenumber',
   'invoicedate',
   'receiptdate',
   'receivedqty',
-  'gstn',
 ];
 
 const statusOptions = ['INCOMPLETE', 'DELAYED', 'COMPLETE'] as const;
@@ -92,16 +82,10 @@ const fieldDefinitions = [
   { name: 'supplier', label: 'Supplier', type: 'text' },
   { name: 'supplierAddress', label: 'Supplier Address', type: 'text' },
   { name: 'supplierState', label: 'Supplier State', type: 'text' },
-  { name: 'supplierStateCode', label: 'Supplier State Code', type: 'text' },
-  { name: 'item', label: 'Item', type: 'text' },
-  { name: 'gst', label: 'GST (%)', type: 'number' },
-  {name: 'gstn', label: 'GSTN', type: 'text' },
-  { name: 'unit', label: 'Unit', type: 'text' },
-  { name: 'rate', label: 'Rate', type: 'number' },
-  { name: 'qty', label: 'Quantity', type: 'number' },
+  { name: 'supplierStateCode', label: 'Supplier State Code', type: 'number' },
+  { name: 'gstn', label: 'GSTN', type: 'text' },
   { name: 'date', label: 'Order Date', type: 'date' },
   { name: 'status', label: 'Status', type: 'select' },
-  { name: 'amount', label: 'Amount', type: 'number' },
   { name: 'invoicenumber', label: 'Invoice Number', type: 'text' },
   { name: 'invoicedate', label: 'Invoice Date', type: 'date' },
   { name: 'receiptdate', label: 'Receipt Date', type: 'date' },
@@ -401,11 +385,7 @@ const Purchase = () => {
     }
   };
 
-  const handleFilterChange = (
-    field: string,
-    key: keyof ColumnFilter,
-    value: string
-  ) => {
+  const handleFilterChange = (field: string, key: keyof ColumnFilter, value: string) => {
     setFilters((prev) => {
       const currentFilter: ColumnFilter = prev[field] || {
         operator: 'contains',
@@ -417,13 +397,7 @@ const Purchase = () => {
         [key]: value,
       };
 
-      // Only remove the filter when the user clears its value,
-      // not when they are changing the operator.
-      if (
-        key !== 'operator' &&
-        !updatedFilter.value &&
-        !updatedFilter.valueTo
-      ) {
+      if (key !== 'operator' && !updatedFilter.value && !updatedFilter.valueTo) {
         const { [field]: _, ...rest } = prev;
         return rest;
       }
@@ -434,6 +408,7 @@ const Purchase = () => {
       };
     });
   };
+
   const clearFilters = () => {
     setFilters({});
   };
@@ -700,7 +675,11 @@ const Purchase = () => {
                     </div>
                   </td>
                 ))}
-                <td><Link to={`/PO/${getEntityId(item)}`} className='text-[#110055] bg-[#ffffff]'>GENERATE PO</Link></td>
+                <td>
+                  <Link to={`/PO/${getEntityId(item)}`} className="text-[#110055] bg-[#ffffff]">
+                    GENERATE PO
+                  </Link>
+                </td>
               </tr>
             ))
           )}
@@ -730,13 +709,13 @@ const Purchase = () => {
                   <option value="ALL">All Locations</option>
                   {availableLocations.map((loc, idx) => {
                     const locId = loc._id || loc.id;
-                    const locName = typeof loc === 'object' ? (loc.name || '') : String(loc);
+                    const locName = typeof loc === 'object' ? loc.name || '' : String(loc);
 
                     if (!locId || !locName) return null;
 
                     return (
                       <option key={locId || idx} value={locId}>
-                        <span className='bg-[#000000] text-white px-2 py-1 rounded'>
+                        <span className="bg-[#000000] text-white px-2 py-1 rounded">
                           {locName}
                         </span>
                       </option>

@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { FaArrowLeft, FaPlus, FaTimes } from 'react-icons/fa';
 import styles from './Purchase.module.scss';
 
-// Field definition type for purchase items
 type FieldDef = {
   name: string;
   label: string;
@@ -17,20 +16,15 @@ const fieldDefinitions: FieldDef[] = [
   { name: 'PONumber', label: 'PO Number', type: 'text', required: true },
   { name: 'supplier', label: 'Supplier', type: 'text', required: false },
   { name: 'supplierAddress', label: 'Supplier Address', type: 'text', required: false },
-  { name: 'supplierStateCode', label: 'Supplier State Code', type: 'text', required: false },
-  { name: 'item', label: 'Item', type: 'text', required: false },
-  { name: 'gst', label: 'GST (%)', type: 'text', required: false },
+  { name: 'supplierState', label: 'Supplier State', type: 'text', required: false },
+  { name: 'supplierStateCode', label: 'Supplier State Code', type: 'number', required: false },
   { name: 'gstn', label: 'GSTN', type: 'text', required: false },
-  { name: 'unit', label: 'Unit', type: 'text', required: false },
-  { name: 'rate', label: 'Rate', type: 'text', required: false },
-  { name: 'qty', label: 'Quantity', type: 'text', required: false },
   { name: 'date', label: 'Order Date', type: 'datetime-local', required: false },
   { name: 'status', label: 'Status', type: 'select', required: false },
-  { name: 'amount', label: 'Amount', type: 'text', required: false },
   { name: 'invoicenumber', label: 'Invoice Number', type: 'text', required: false },
   { name: 'invoicedate', label: 'Invoice Date', type: 'datetime-local', required: false },
   { name: 'receiptdate', label: 'Receipt Date', type: 'datetime-local', required: false },
-  { name: 'receivedqty', label: 'Received Quantity', type: 'text', required: false },
+  { name: 'receivedqty', label: 'Received Quantity', type: 'number', required: false },
 ];
 
 const visibleFields = fieldDefinitions.map((f) => f.name);
@@ -39,14 +33,13 @@ const statusOptions = ['INCOMPLETE', 'DELAYED', 'COMPLETE'] as const;
 const normalizeFieldValue = (field: string, value: string) => {
   if (value === '') return undefined;
   const def = fieldDefinitions.find((d) => d.name === field);
-  
+
   if (def?.type === 'number') {
     const parsed = Number(value);
     return Number.isNaN(parsed) ? undefined : parsed;
   }
 
-  // Format datetime-local into proper ISO-8601 string expected by the backend schema
-  if (def?.type === 'datetime-local') {
+  if (def?.type === 'datetime-local' || def?.type === 'date') {
     const dateObj = new Date(value);
     return Number.isNaN(dateObj.getTime()) ? undefined : dateObj.toISOString();
   }
@@ -62,35 +55,40 @@ export default function PurchaseNew() {
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const locationId = localStorage.getItem('hbus_selected_location_id');
+  e.preventDefault();
+  setError(null);
+  const locationId = localStorage.getItem('hbus_selected_location_id');
 
-    if (!locationId || locationId === 'ALL') {
-      const locationError = 'Please select a specific location before creating a purchase order.';
-      setError(locationError);
-      toast.error(locationError);
-      return;
-    }
+  if (!locationId || locationId === 'ALL') {
+    const locationError = 'Please select a specific location before creating a purchase order.';
+    setError(locationError);
+    toast.error(locationError);
+    return;
+  }
 
-    const payload = {
-      ...Object.fromEntries(
-        Object.entries(createData)
-          .map(([k, v]) => [k, normalizeFieldValue(k, v)])
-          .filter(([, v]) => v !== undefined),
-      ),
-      locationId,
-    };
-
-    try {
-      await axios.post(`${import.meta.env.VITE_APP_API}/api/purchases`, payload);
-      toast.success('Purchase created.');
-      navigate('/purchase');
-    } catch (err) {
-      setError('Failed to create purchase.');
-      toast.error('Failed to create purchase.');
-    }
+  const payload = {
+    ...Object.fromEntries(
+      Object.entries(createData)
+        .map(([k, v]) => [k, normalizeFieldValue(k, v)])
+        .filter(([, v]) => v !== undefined),
+    ),
+    locationId,
+    location: locationId,
+    items: [], // Explicitly send empty items array on creation
   };
 
+  try {
+    const res = await axios.post(`${import.meta.env.VITE_APP_API}/api/purchases`, payload);
+    toast.success('Purchase order created successfully.');
+    
+    // Redirect to the item management page for this specific PO
+    navigate(`/purchase`);
+  } catch (err: any) {
+    const serverMsg = err.response?.data?.message || 'Failed to create purchase.';
+    setError(serverMsg);
+    toast.error(serverMsg);
+  }
+};
   return (
     <main className={styles.purchase}>
       <section className={styles.card}>
