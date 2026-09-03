@@ -1,0 +1,400 @@
+$border-color: #000000;
+$font-family: 'Times New Roman', Times, serif;
+
+.pageWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  background-color: #f4f6f8;
+  min-height: 100vh;
+  font-family: $font-family;
+}
+
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 50vh;
+  font-size: 1.2rem;
+  color: #555;
+}
+
+/* Action controls bar */
+.actionBar {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 900px;
+  margin-bottom: 20px;
+
+  .rightActions {
+    display: flex;
+    gap: 12px;
+  }
+}
+
+.primaryBtn,
+.secondaryBtn,
+.printBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.2s ease;
+}
+
+.primaryBtn {
+  background-color: #0056b3;
+  color: #ffffff;
+
+  &:hover {
+    background-color: #004085;
+  }
+}
+
+.secondaryBtn {
+  background-color: #6c757d;
+  color: #ffffff;
+
+  &:hover {
+    background-color: #5a6268;
+  }
+}
+
+.printBtn {
+  background-color: #28a745;
+  color: #ffffff;
+
+  &:hover {
+    background-color: #218838;
+  }
+}
+
+/* Document Container Replicating Official Layout */
+.poDocument {
+  background: #ffffff;
+  width: 100%;
+  max-width: 900px;
+  padding: 16px;
+  border: 2px solid $border-color;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  color: #000000;
+  box-sizing: border-box;
+
+  .mainTitle {
+    text-align: center;
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin: 0 0 8px 0;
+    letter-spacing: 1px;
+    font-family: 'Times New Roman', Times, serif;
+  }
+}
+
+/* Header with Logo and Tagline */
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid $border-color;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+
+  .logoSection {
+    .logo {
+      height: 48px;
+      object-fit: contain;
+    }
+  }
+
+  .taglineSection {
+    .companyName {
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #0a2540;
+      margin: 0;
+
+      span {
+        color: #d9534f;
+      }
+    }
+  }
+
+  .subTagline {
+    font-style: italic;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1d2d50;
+    font-family: 'Georgia', serif;
+  }
+}
+
+/* Meta Rows (GSTN, PO No, Date) */
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+
+  .metaGroup {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .metaLabel {
+      font-weight: bold;
+      font-size: 0.95rem;
+      white-space: nowrap;
+    }
+  }
+}
+
+/* Boxed Grid for Individual Characters */
+.boxedGrid {
+  display: inline-flex;
+  border-top: 1px solid $border-color;
+  border-left: 1px solid $border-color;
+
+  .box {
+    width: 18px;
+    height: 22px;
+    border-right: 1px solid $border-color;
+    border-bottom: 1px solid $border-color;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+}
+
+/* Supplier & Shipping Block Grid */
+.addressGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  border: 1px solid $border-color;
+  margin-top: 8px;
+  margin-bottom: 12px;
+
+  .supplierBlock {
+    padding: 8px;
+    border-right: 1px solid $border-color;
+
+    .blockLabel {
+      font-weight: bold;
+      margin: 0 0 4px 0;
+    }
+
+    .supplierName {
+      font-weight: bold;
+      text-transform: uppercase;
+      margin: 0 0 2px 0;
+      font-size: 0.95rem;
+    }
+
+    .supplierAddress {
+      margin: 0 0 6px 0;
+      font-size: 0.9rem;
+      white-space: pre-line;
+    }
+
+    .gstnInline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .stateRow {
+      display: flex;
+      gap: 24px;
+      font-weight: bold;
+      font-size: 0.9rem;
+    }
+  }
+
+  .shippingBlock {
+    padding: 8px;
+
+    .blockLabelUnderline {
+      font-weight: bold;
+      text-decoration: underline;
+      margin: 0 0 6px 0;
+    }
+
+    .shippingAddress {
+      margin: 0;
+      font-size: 0.9rem;
+      white-space: pre-line;
+      line-height: 1.3;
+    }
+  }
+}
+
+/* Items Table */
+.itemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid $border-color;
+
+  th,
+  td {
+    border: 1px solid $border-color;
+    padding: 8px;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .textCenter {
+    text-align: center;
+  }
+
+  .textLeft {
+    text-align: left;
+    white-space: pre-line;
+  }
+
+  .textRight {
+    text-align: right;
+  }
+
+  .emptyTableText {
+    text-align: center;
+    padding: 24px;
+    color: #777;
+    font-style: italic;
+  }
+
+  .iconBtnEdit,
+  .iconBtnDelete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 4px;
+    margin: 0 2px;
+
+    &:hover {
+      opacity: 0.7;
+    }
+  }
+
+  .iconBtnEdit {
+    color: #0056b3;
+  }
+
+  .iconBtnDelete {
+    color: #dc3545;
+  }
+}
+
+/* Modal styling */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+
+  .modalContent {
+    background: #ffffff;
+    width: 100%;
+    max-width: 500px;
+    border-radius: 6px;
+    padding: 20px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+
+    .modalHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+
+      h3 {
+        margin: 0;
+        font-size: 1.2rem;
+      }
+
+      .closeBtn {
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        cursor: pointer;
+      }
+    }
+
+    .modalForm {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
+      .formGroup {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        label {
+          font-weight: 600;
+          font-size: 0.85rem;
+        }
+
+        input,
+        textarea {
+          padding: 8px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          font-size: 0.9rem;
+        }
+      }
+
+      .formRow {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .modalActions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+      }
+    }
+  }
+}
+
+/* Print CSS setup */
+@media print {
+  .noPrint {
+    display: none !important;
+  }
+
+  .pageWrapper {
+    background: none;
+    padding: 0;
+  }
+
+  .poDocument {
+    border: 2px solid #000;
+    box-shadow: none;
+    max-width: 100%;
+    width: 100%;
+  }
+}
