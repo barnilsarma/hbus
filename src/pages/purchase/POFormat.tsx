@@ -40,6 +40,95 @@ const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '',
   );
 };
 
+// Helper: Convert number to Indian Currency Words (Rupees & Paise)
+const numberToIndianWords = (num: number): string => {
+  if (isNaN(num) || num < 0) return '';
+  const [rupeesStr, paiseStr] = num.toFixed(2).split('.');
+  let rupees = parseInt(rupeesStr, 10);
+  const paise = parseInt(paiseStr, 10);
+
+  if (rupees === 0 && paise === 0) return 'Rupees Zero Only';
+
+  const ones = [
+    '',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+    'Eleven',
+    'Twelve',
+    'Thirteen',
+    'Fourteen',
+    'Fifteen',
+    'Sixteen',
+    'Seventeen',
+    'Eighteen',
+    'Nineteen',
+  ];
+  const tens = [
+    '',
+    '',
+    'Twenty',
+    'Thirty',
+    'Forty',
+    'Fifty',
+    'Sixty',
+    'Seventy',
+    'Eighty',
+    'Ninety',
+  ];
+
+  const convertTwoDigits = (n: number): string => {
+    if (n < 20) return ones[n];
+    return `${tens[Math.floor(n / 10)]} ${ones[n % 10]}`.trim();
+  };
+
+  const convertThreeDigits = (n: number): string => {
+    let str = '';
+    if (Math.floor(n / 100) > 0) {
+      str += `${ones[Math.floor(n / 100)]} Hundred `;
+    }
+    if (n % 100 > 0) {
+      str += convertTwoDigits(n % 100);
+    }
+    return str.trim();
+  };
+
+  let words = '';
+
+  if (rupees >= 10000000) {
+    words += `${convertTwoDigits(Math.floor(rupees / 10000000))} Crores `;
+    rupees %= 10000000;
+  }
+  if (rupees >= 100000) {
+    words += `${convertTwoDigits(Math.floor(rupees / 100000))} Lakhs `;
+    rupees %= 100000;
+  }
+  if (rupees >= 1000) {
+    words += `${convertTwoDigits(Math.floor(rupees / 1000))} Thousand `;
+    rupees %= 1000;
+  }
+  if (rupees > 0) {
+    words += convertThreeDigits(rupees);
+  }
+
+  words = words.trim() ? `Rupees ${words.trim()}` : 'Rupees Zero';
+
+  if (paise > 0) {
+    words += ` and Paise ${convertTwoDigits(paise)} Only`;
+  } else {
+    words += ' and Paise Zero Only';
+  }
+
+  return words;
+};
+
 export default function POFormat() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -90,15 +179,15 @@ export default function POFormat() {
     e.preventDefault();
     try {
       if (editingItemId) {
-        // 1. Update item document directly via item endpoint
+        // Update item document directly via item endpoint
         await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${editingItemId}`, itemForm);
         toast.success('Item updated successfully.');
       } else {
-        // 1. Create a new item document in the Item collection
+        // Create a new item document in the Item collection
         const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, itemForm);
         const newItemId = itemRes.data._id;
 
-        // 2. Extract existing ObjectIds and push the newly created ObjectId to Purchase
+        // Extract existing ObjectIds and push the newly created ObjectId to Purchase
         const currentItemIds = (poData?.items || []).map((it: any) =>
           typeof it === 'string' ? it : it._id,
         );
@@ -155,6 +244,43 @@ export default function POFormat() {
     poData?.invoicedate || poData?.date
       ? new Date(poData.invoicedate || poData.date).toLocaleDateString('en-GB')
       : '';
+
+  // Dynamic Calculations based on items array
+  const itemsList: Item[] = poData?.items || [];
+  const totalWithoutTax = itemsList.reduce(
+    (sum, item) => sum + (item.rate || 0) * (item.qty || 0),
+    0,
+  );
+
+  // Check GST state (Assam Code: 18 / Assam state) to split CGST/SGST vs IGST
+  const isIntraState =
+    poData?.supplierStateCode === '18' ||
+    (poData?.supplierState || '').toLowerCase().includes('assam');
+
+  let totalCGST = 0;
+  let totalSGST = 0;
+  let totalIGST = 0;
+
+  itemsList.forEach((item) => {
+    const itemTotal = (item.rate || 0) * (item.qty || 0);
+    const taxAmount = itemTotal * ((item.gst || 0) / 100);
+    if (isIntraState) {
+      totalCGST += taxAmount / 2;
+      totalSGST += taxAmount / 2;
+    } else {
+      totalIGST += taxAmount;
+    }
+  });
+
+  const totalTax = totalCGST + totalSGST + totalIGST;
+  const grandTotal = totalWithoutTax + totalTax;
+  const roundOffTotal = Math.round(grandTotal);
+
+  // Delivery target date (30 days after PO Date)
+  const poDateObj = poData?.invoicedate || poData?.date ? new Date(poData.invoicedate || poData.date) : new Date();
+  const deliveryDateObj = new Date(poDateObj);
+  deliveryDateObj.setDate(deliveryDateObj.getDate() + 30);
+  const formattedDeliveryDate = deliveryDateObj.toLocaleDateString('en-GB');
 
   return (
     <div className={styles.pageWrapper}>
@@ -254,8 +380,8 @@ export default function POFormat() {
             </tr>
           </thead>
           <tbody>
-            {poData?.items && poData.items.length > 0 ? (
-              poData.items.map((item: Item, index: number) => {
+            {itemsList.length > 0 ? (
+              itemsList.map((item: Item, index: number) => {
                 const totalAmount = (item.rate || 0) * (item.qty || 0);
                 return (
                   <tr key={item._id || index}>
@@ -266,12 +392,14 @@ export default function POFormat() {
                     <td className={styles.textRight}>
                       {Number(item.rate).toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
                       })}
                     </td>
                     <td className={styles.textCenter}>{item.qty}</td>
                     <td className={styles.textRight}>
                       {totalAmount.toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
                       })}
                     </td>
                     <td className={`${styles.textCenter} ${styles.noPrint}`}>
@@ -302,6 +430,164 @@ export default function POFormat() {
             )}
           </tbody>
         </table>
+
+        {/* Calculation Summary & Bank Details Block */}
+        <div className={styles.summaryGrid}>
+          {/* Left Column: Words & Bank Details */}
+          <div className={styles.summaryLeft}>
+            <div className={styles.wordsRow}>
+              <span className={styles.wordsLabel}>₹ (in words):</span>
+              <p className={styles.wordsValue}>{numberToIndianWords(roundOffTotal)}</p>
+            </div>
+
+            <div className={styles.bankBlock}>
+              <h4 className={styles.bankTitle}>Your Bank Details :</h4>
+              <table className={styles.bankDetailsTable}>
+                <tbody>
+                  <tr>
+                    <td>Bank Name :</td>
+                    <td><strong>State Bank Of India</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Branch :</td>
+                    <td><strong>PAIKPARA</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Account No :</td>
+                    <td><strong>38088881020</strong></td>
+                  </tr>
+                  <tr>
+                    <td>IFSC :</td>
+                    <td><strong>S B I N 0001747</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right Column: Amount Breakdowns */}
+          <div className={styles.summaryRight}>
+            <table className={styles.breakdownTable}>
+              <tbody>
+                <tr>
+                  <td>Total Without Tax</td>
+                  <td className={styles.amountCol}>
+                    {totalWithoutTax.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+                <tr>
+                  <td>Discount Amount</td>
+                  <td className={styles.amountCol}>-</td>
+                </tr>
+                <tr>
+                  <td>CGST</td>
+                  <td className={styles.amountCol}>
+                    {totalCGST > 0
+                      ? totalCGST.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td>SGST</td>
+                  <td className={styles.amountCol}>
+                    {totalSGST > 0
+                      ? totalSGST.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td>IGST</td>
+                  <td className={styles.amountCol}>
+                    {totalIGST > 0
+                      ? totalIGST.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : ''}
+                  </td>
+                </tr>
+                <tr className={styles.boldRow}>
+                  <td>Total Amount</td>
+                  <td className={styles.amountCol}>
+                    {grandTotal.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+                <tr>
+                  <td>Advance</td>
+                  <td className={styles.amountCol}>-</td>
+                </tr>
+                <tr className={styles.boldRow}>
+                  <td>Payable Amount</td>
+                  <td className={styles.amountCol}>
+                    {grandTotal.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+                <tr className={styles.highlightRow}>
+                  <td>Round Off</td>
+                  <td className={styles.amountCol}>
+                    {roundOffTotal.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Terms & Authorised Signatory Footer Row */}
+        <div className={styles.footerGrid}>
+          <div className={styles.termsBlock}>
+            <h4 className={styles.termsTitle}>Terms & Condition:</h4>
+            <ol className={styles.termsList}>
+              <li>Supplied Quantity Should Not Be Less Than PO Quantity</li>
+              <li>
+                <u>Delivery: IGC, Matia, Mornoi, Goalpara-783101</u>
+              </li>
+              <li>
+                Delivery should be strictly within 30 days from today, i.e . by{' '}
+                {formattedDeliveryDate}
+              </li>
+              <li>On delivery to transporter, please share the CN Copy</li>
+            </ol>
+          </div>
+
+          <div className={styles.signatoryBlock}>
+            <p className={styles.companySignTitle}>
+              For H-BUS Equipment Manufacturing Company
+            </p>
+            <div className={styles.signatureSpace}>
+              {/* Optional Signature image or space */}
+            </div>
+            <p className={styles.signatoryLabel}>Authorised Signatory</p>
+          </div>
+        </div>
+
+        {/* Bottom Banner Address Line */}
+        <div className={styles.bottomBanner}>
+          <p>
+            Regd Office: House No: 4, Dhrubajyoti Path, Ambikagiri Nagar, R.G.B. Road, Guwahati, Assam
+          </p>
+          <p>
+            Mob: 9854089190 / 9101036494; &nbsp;&nbsp; Email: hbustransformers@gmail.com &nbsp;&nbsp; Web: www.hbus.org
+          </p>
+        </div>
       </div>
 
       {/* Add / Edit Item Modal */}
