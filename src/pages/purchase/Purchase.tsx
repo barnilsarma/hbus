@@ -54,7 +54,7 @@ type PurchaseItem = {
   receiptdate?: string;
   receivedqty?: number;
   location?: any;
-  items?: any[]; // References the IItem array
+  items?: any[];
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -154,6 +154,9 @@ const Purchase = () => {
   // --- Filtering State ---
   const [showFilterRow, setShowFilterRow] = useState(false);
   const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
+  
+  // ADDED: Debounced filters for 1-second delayed rendering
+  const [debouncedFilters, setDebouncedFilters] = useState<Record<string, ColumnFilter>>({});
 
   // --- Location State ---
   const [userLocation, setUserLocation] = useState<string | string[] | null>(null);
@@ -180,7 +183,14 @@ const Purchase = () => {
   const isAdmin = isTypeA || role === 'B';
   const [canEditItems, setCanEditItems] = useState<boolean>(isAdmin);
 
-  // Fetch current logged-in user context
+  // Apply the 1-second debounce effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [filters]);
+
   useEffect(() => {
     const currentUserId = localStorage.getItem('hbus_user_id') || localStorage.getItem('userId');
 
@@ -204,7 +214,6 @@ const Purchase = () => {
     }
   }, [isAdmin, isTypeA]);
 
-  // Read edit permission fallback from local storage
   useEffect(() => {
     if (!isAdmin) {
       try {
@@ -306,27 +315,44 @@ const Purchase = () => {
       const currentView = selectedUser.viewaccess || [];
       const currentEdit = selectedUser.editaccess || [];
 
-      const updatedView = viewAccess
-        ? Array.from(new Set([...currentView, PURCHASE_DEPARTMENT]))
-        : currentView.filter((d) => d.trim().toLowerCase() !== PURCHASE_DEPARTMENT.toLowerCase());
+      const hasViewNow = currentView.some(
+        (d) => d.trim().toLowerCase() === PURCHASE_DEPARTMENT.toLowerCase()
+      );
+      const hasEditNow = currentEdit.some(
+        (d) => d.trim().toLowerCase() === PURCHASE_DEPARTMENT.toLowerCase()
+      );
 
-      const updatedEdit = editAccess
-        ? Array.from(new Set([...currentEdit, PURCHASE_DEPARTMENT]))
-        : currentEdit.filter((d) => d.trim().toLowerCase() !== PURCHASE_DEPARTMENT.toLowerCase());
+      // 1. Handle View Access changes
+      if (viewAccess && !hasViewNow) {
+        await axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
+          department: PURCHASE_DEPARTMENT,
+          access: 'view',
+        });
+      } else if (!viewAccess && hasViewNow) {
+        await axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
+          data: { department: PURCHASE_DEPARTMENT, access: 'view' },
+        });
+      }
 
-      await axios.put(`${import.meta.env.VITE_APP_API}/api/users/${userId}/access`, {
-        viewaccess: updatedView,
-        editaccess: updatedEdit,
-      });
+      // 2. Handle Edit Access changes
+      if (editAccess && !hasEditNow) {
+        await axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
+          department: PURCHASE_DEPARTMENT,
+          access: 'edit',
+        });
+      } else if (!editAccess && hasEditNow) {
+        await axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
+          data: { department: PURCHASE_DEPARTMENT, access: 'edit' },
+        });
+      }
 
       toast.success('User access permissions updated.');
       closeAccessCheckModal();
       loadUsers();
-    } catch (err) {
-      toast.error('Failed to update access settings.');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update access settings.');
     }
   };
-
   const openEditModal = (item: PurchaseItem, field: string) => {
     if (!canEditItems) return;
     setEditItem(item);
@@ -413,6 +439,7 @@ const Purchase = () => {
     setFilters({});
   };
 
+  // UPDATED: Use debouncedFilters instead of direct filters to prevent blocking the UI
   const filteredPurchases = useMemo(() => {
     return purchases.filter((item) => {
       // 1. Role / Location Filter Rules
@@ -437,8 +464,8 @@ const Purchase = () => {
         }
       }
 
-      // 2. Dynamic Table Column Filters
-      return Object.entries(filters).every(([field, filter]) => {
+      // 2. Dynamic Table Column Filters using debouncedFilters
+      return Object.entries(debouncedFilters).every(([field, filter]) => {
         if (!filter || (!filter.value && !filter.valueTo)) return true;
 
         const rawValue = item[field];
@@ -528,7 +555,7 @@ const Purchase = () => {
         }
       });
     });
-  }, [purchases, filters, isTypeA, selectedLocationId, userLocation]);
+  }, [purchases, debouncedFilters, isTypeA, selectedLocationId, userLocation]);
 
   const renderFilterControl = (field: string) => {
     const definition = fieldDefinitions.find((f) => f.name === field);
@@ -625,7 +652,10 @@ const Purchase = () => {
     );
   };
 
-  const RenderTable = () => (
+  const hasActiveFilters = Object.keys(filters).length > 0;
+  
+  // FIX: Render table data entirely in-line to prevent React from unmounting standard inputs on every state change.
+  const tableContent = (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
         <thead>
@@ -688,7 +718,6 @@ const Purchase = () => {
     </div>
   );
 
-  const hasActiveFilters = Object.keys(filters).length > 0;
   return (
     <main className={styles.purchase}>
       <section className={styles.card}>
@@ -757,7 +786,8 @@ const Purchase = () => {
 
         {error && <div className={styles.error}>{error}</div>}
 
-        <RenderTable />
+        {/* FIX: Rendered inline instead of calling a component function */}
+        {tableContent}
       </section>
 
       {/* Edit Field Modal */}

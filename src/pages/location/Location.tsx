@@ -38,6 +38,10 @@ const Location: React.FC = () => {
   // User Management Modal States
   const [users, setUsers] = useState<IUser[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<ILocationItem | null>(null);
+  
+  // State for viewing users assigned to a location
+  const [viewingLocation, setViewingLocation] = useState<ILocationItem | null>(null);
+
   const [userSearchTerm, setUserSearchTerm] = useState<string>("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [assigningUsers, setAssigningUsers] = useState<boolean>(false);
@@ -239,11 +243,20 @@ const Location: React.FC = () => {
                   <h2 className={styles.cardTitle}>{loc.name}</h2>
                   <p className={styles.cardBody}>{loc.address || loc.description}</p>
                 </div>
-                <div>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   {loc.users && (
                     <span className={styles.badge}>
                       {loc.users.length} Users Assigned
                     </span>
+                  )}
+                  {/* Show Users Button */}
+                  {loc.users && loc.users.length > 0 && (
+                    <button
+                      className={styles.secondaryBtn}
+                      onClick={() => setViewingLocation(loc)}
+                    >
+                      Show Users
+                    </button>
                   )}
                   {isAuthorizedToManageUsers && (
                     <button
@@ -263,6 +276,59 @@ const Location: React.FC = () => {
           <p className={styles.loadingState}>Loading location data...</p>
         )}
       </main>
+
+      {/* View Users Modal */}
+      {viewingLocation && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent}>
+            <div className={styles.formHeader}>
+              <h2>Users in {viewingLocation.name}</h2>
+              <button
+                type="button"
+                className={styles.closeBtn}
+                onClick={() => setViewingLocation(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className={styles.userList}>
+              {viewingLocation.users && viewingLocation.users.length > 0 ? (
+                viewingLocation.users.map((user, idx) => {
+                  // Fallback to handle both populated IUser objects and string IDs
+                  const isPopulated = typeof user !== "string";
+                  const userId = isPopulated ? (user as IUser)._id : user;
+                  const userName = isPopulated ? (user as IUser).name : `User ID: ${user}`;
+                  const userEmail = isPopulated ? (user as IUser).email : "";
+                  const userRole = isPopulated ? (user as IUser).role : "";
+
+                  return (
+                    <div key={userId || idx} className={styles.userItem}>
+                      <div className={styles.userInfo}>
+                        <span className={styles.userName}>{userName}</span>
+                        {userEmail && <span className={styles.userEmail}>{userEmail}</span>}
+                      </div>
+                      {userRole && <span className={styles.userRoleTag}>Role {userRole}</span>}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className={styles.emptyState}>No users assigned to this location.</p>
+              )}
+            </div>
+
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                onClick={() => setViewingLocation(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Users Modal */}
       {selectedLocation && (
