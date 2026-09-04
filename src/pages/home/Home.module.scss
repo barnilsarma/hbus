@@ -4,17 +4,53 @@ main{
     align-items:center;
     justify-content:center;
     min-height:100vh;
+    overflow-x:hidden;
     .home{
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        overflow-x:hidden;
+        width: 100%;
         .navbar{
             display: flex;
-            flex-direction: row;
+            flex-direction: column;
             align-items: center;
             justify-content: space-between;
             width: 100%;
+            animation: slideIn 1s ease-in-out;
+            
+            button{
+                min-width:20rem;
+                margin: 1rem;
+                padding:1rem;
+                border:0 solid transparent;
+                border-radius: 0.5rem;
+                cursor:pointer;
+                font-size:1.5rem;
+                background-color:#37c0ff;
+                color:#001620;
+                font-weight: 600;
+                box-shadow: 0 0 1rem #37c0ff;
+                scale:1;
+                transition-duration:0.5s;
+                &:hover{
+                    background-color:#b9e5ff;
+                    box-shadow: 0 0 2rem #b9e5ff;
+                    scale:1.05;
+                    border-radius: 1.7rem;
+                }
+            }
+        }
+        @keyframes slideIn {
+            0% {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            100% {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
     }
 }
