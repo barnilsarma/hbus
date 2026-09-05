@@ -82,7 +82,7 @@ export default function PurchaseNew() {
     toast.success('Purchase order created successfully.');
     
     // Redirect to the item management page for this specific PO
-    navigate(`/purchase`);
+    if(res) navigate(`/purchase`);
   } catch (err: any) {
     const serverMsg = err.response?.data?.message || 'Failed to create purchase.';
     setError(serverMsg);
