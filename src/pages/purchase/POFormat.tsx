@@ -1,25 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
 
 type Item = {
   _id?: string;
+  mcode?: string;
   description: string;
   gst: number;
   unit: string;
   rate: number;
   qty: number;
+  newQty?: number; // For adding new quantity in the PO context
 };
 
 const initialItemState: Item = {
+  mcode: '',
   description: '',
   gst: 18,
   unit: 'NOS',
   rate: 0,
-  qty: 1,
+  qty: 0,
+  newQty: 0,
 };
 
 // Helper component to render individual character grid boxes
@@ -50,39 +54,10 @@ const numberToIndianWords = (num: number): string => {
   if (rupees === 0 && paise === 0) return 'Rupees Zero Only';
 
   const ones = [
-    '',
-    'One',
-    'Two',
-    'Three',
-    'Four',
-    'Five',
-    'Six',
-    'Seven',
-    'Eight',
-    'Nine',
-    'Ten',
-    'Eleven',
-    'Twelve',
-    'Thirteen',
-    'Fourteen',
-    'Fifteen',
-    'Sixteen',
-    'Seventeen',
-    'Eighteen',
-    'Nineteen',
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
   ];
-  const tens = [
-    '',
-    '',
-    'Twenty',
-    'Thirty',
-    'Forty',
-    'Fifty',
-    'Sixty',
-    'Seventy',
-    'Eighty',
-    'Ninety',
-  ];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
   const convertTwoDigits = (n: number): string => {
     if (n < 20) return ones[n];
@@ -140,6 +115,10 @@ export default function POFormat() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemForm, setItemForm] = useState<Item>(initialItemState);
+  
+  // Search States
+  const [searchMcode, setSearchMcode] = useState<string>('');
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
 
   const fetchPOData = async () => {
     try {
@@ -160,34 +139,97 @@ export default function POFormat() {
   const handleOpenAddModal = () => {
     setEditingItemId(null);
     setItemForm(initialItemState);
+    setSearchMcode('');
+    setSearchStatus('idle');
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (item: Item) => {
     setEditingItemId(item._id || null);
     setItemForm({
+      _id: item._id,
+      mcode: item.mcode,
       description: item.description,
       gst: item.gst,
       unit: item.unit,
       rate: item.rate,
       qty: item.qty,
     });
+    setSearchStatus('idle'); // Skip search phase when editing
     setIsModalOpen(true);
   };
 
-  const handleSaveItem = async (e: React.FormEvent) => {
+  const handleSearchItem = async () => {
+    if (!searchMcode.trim()) {
+      toast.error('Please enter a Material Code');
+      return;
+    }
+    
+    setSearchStatus('loading');
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`);
+      if (response.data) {
+        // Automatically default to qty 1 for the new PO context
+        setItemForm({ ...response.data, qty: 1 });
+        setSearchStatus('found');
+        toast.success('Item found!');
+      } else {
+        throw new Error('Item not found');
+      }
+    } catch (error: any) {
+      if (error.response?.status === 404 || error.message === 'Item not found') {
+        setSearchStatus('not-found');
+        setItemForm({ ...initialItemState, mcode: searchMcode });
+        toast.info('Item not found. You can add it as a new item.');
+      } else {
+        toast.error('Error searching for item.');
+        setSearchStatus('idle');
+      }
+    }
+  };
+const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingItemId) {
-        // Update item document directly via item endpoint
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${editingItemId}`, itemForm);
-        toast.success('Item updated successfully.');
+      const { _id: _, ...restPayload } = itemForm;
+
+      const locationId = localStorage.getItem('hbus_selected_location_id');
+      console.log('Debugging Location ID from localStorage:', locationId);
+
+      if (!locationId) {
+        toast.error('Selected location not found in local storage. Please select a location first.');
+        return;
+      }
+
+      const payload = {
+        ...restPayload,
+        location: locationId,
+      };
+
+      console.log('Final Payload being sent to API:', payload);
+
+      if (editingItemId || searchStatus === 'found') {
+        const targetId = editingItemId || itemForm._id;
+        const res = await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
+        console.log('Server response after item update:', res.data);
+        
+        if (searchStatus === 'found') {
+          const currentItemIds = (poData?.items || []).map((it: any) =>
+            typeof it === 'string' ? it : it._id,
+          );
+          if (!currentItemIds.includes(targetId)) {
+            const updatedItemIds = [...currentItemIds, targetId];
+            await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
+              items: updatedItemIds,
+            });
+          }
+        }
+        
+        toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
       } else {
-        // Create a new item document in the Item collection
-        const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, itemForm);
+        const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, payload);
+        console.log('Server response after item creation:', itemRes.data);
         const newItemId = itemRes.data._id;
 
-        // Extract existing ObjectIds and push the newly created ObjectId to Purchase
         const currentItemIds = (poData?.items || []).map((it: any) =>
           typeof it === 'string' ? it : it._id,
         );
@@ -196,7 +238,7 @@ export default function POFormat() {
         await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
           items: updatedItemIds,
         });
-        toast.success('Item added successfully.');
+        toast.success('New item created and added to PO.');
       }
 
       await fetchPOData();
@@ -206,7 +248,6 @@ export default function POFormat() {
       toast.error(error.response?.data?.message || 'Failed to save item.');
     }
   };
-
   const handleDeleteItem = async (itemId: string) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
 
@@ -248,7 +289,7 @@ export default function POFormat() {
   // Dynamic Calculations based on items array
   const itemsList: Item[] = poData?.items || [];
   const totalWithoutTax = itemsList.reduce(
-    (sum, item) => sum + (item.rate || 0) * (item.qty || 0),
+    (sum, item) => sum + (item.rate || 0) * (item.newQty || 0),
     0,
   );
 
@@ -262,7 +303,7 @@ export default function POFormat() {
   let totalIGST = 0;
 
   itemsList.forEach((item) => {
-    const itemTotal = (item.rate || 0) * (item.qty || 0);
+    const itemTotal = (item.rate || 0) * (item.newQty || 0);
     const taxAmount = itemTotal * ((item.gst || 0) / 100);
     if (isIntraState) {
       totalCGST += taxAmount / 2;
@@ -382,7 +423,7 @@ export default function POFormat() {
           <tbody>
             {itemsList.length > 0 ? (
               itemsList.map((item: Item, index: number) => {
-                const totalAmount = (item.rate || 0) * (item.qty || 0);
+                const totalAmount = (item.rate || 0) * (item.newQty || 0);
                 return (
                   <tr key={item._id || index}>
                     <td className={styles.textCenter}>{index + 1}</td>
@@ -395,7 +436,7 @@ export default function POFormat() {
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className={styles.textCenter}>{item.qty}</td>
+                    <td className={styles.textCenter}>{item.newQty}</td>
                     <td className={styles.textRight}>
                       {totalAmount.toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
@@ -600,76 +641,147 @@ export default function POFormat() {
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleSaveItem} className={styles.modalForm}>
-              <div className={styles.formGroup}>
-                <label>Item Description *</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={itemForm.description}
-                  onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-                  placeholder="Enter detailed item description..."
-                />
+            
+            <div className={styles.modalBody}>
+              <div className={styles.linkContainer} style={{ marginBottom: '15px' }}>
+                <Link to="/store" className={styles.catalogueLink} style={{ color: '#0056b3', textDecoration: 'underline' }}>
+                  See Items Catalogue
+                </Link>
               </div>
 
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label>GST (%) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={itemForm.gst}
-                    onChange={(e) => setItemForm({ ...itemForm, gst: Number(e.target.value) })}
-                  />
+              {/* Only show search when ADDING a new item and before found/not-found */}
+              {!editingItemId && searchStatus === 'idle' && (
+                <div className={styles.searchSection} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <div className={styles.formGroup} style={{ flex: 1 }}>
+                    <label>Search item by Material Code (e.g., H0001)</label>
+                    <input 
+                      type="text" 
+                      value={searchMcode}
+                      onChange={(e) => setSearchMcode(e.target.value)}
+                      placeholder="Enter MCode"
+                    />
+                  </div>
+                  <button type="button" onClick={handleSearchItem} className={styles.primaryBtn} style={{ marginTop: '24px' }}>
+                    <FaSearch /> Search
+                  </button>
                 </div>
-                <div className={styles.formGroup}>
-                  <label>Unit *</label>
-                  <input
-                    type="text"
-                    required
-                    value={itemForm.unit}
-                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-                    placeholder="e.g. NOS, KG, SET"
-                  />
-                </div>
-              </div>
+              )}
 
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label>Rate (₹) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={itemForm.rate}
-                    onChange={(e) => setItemForm({ ...itemForm, rate: Number(e.target.value) })}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Quantity *</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={itemForm.qty}
-                    onChange={(e) => setItemForm({ ...itemForm, qty: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
+              {searchStatus === 'loading' && <p>Searching...</p>}
 
-              <div className={styles.modalActions}>
-                <button
-                  type="button"
-                  className={styles.secondaryBtn}
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className={styles.primaryBtn}>
-                  {editingItemId ? 'Update Item' : 'Add Item'}
-                </button>
-              </div>
-            </form>
+              {/* Form rendering based on Search Status or Editing State */}
+              {(editingItemId || searchStatus === 'found' || searchStatus === 'not-found') && (
+                <form onSubmit={handleSaveItem} className={styles.modalForm}>
+                  
+                  {/* If item was found, show read-only details to confirm */}
+                  {searchStatus === 'found' && !editingItemId && (
+                    <div className={styles.foundItemDetails} style={{ padding: '10px', background: '#f5f5f5', borderRadius: '5px', marginBottom: '15px' }}>
+                      <p><strong>Material Code:</strong> {itemForm.mcode}</p>
+                      <p><strong>Description:</strong> {itemForm.description}</p>
+                      <p><strong>Unit:</strong> {itemForm.unit}</p>
+                      <p><strong>Rate:</strong> ₹{itemForm.rate}</p>
+                      <p><strong>GST:</strong> {itemForm.gst}%</p>
+                    </div>
+                  )}
+
+                  {/* Standard Form Fields if not found or if editing */}
+                  {(searchStatus === 'not-found' || editingItemId) && (
+                    <>
+                      <div className={styles.formGroup}>
+                        <label>Material Code *</label>
+                        <input
+                          type="text"
+                          required
+                          value={itemForm.mcode}
+                          onChange={(e) => setItemForm({ ...itemForm, mcode: e.target.value })}
+                          placeholder="e.g. H0001"
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label>Item Description *</label>
+                        <textarea
+                          rows={3}
+                          required
+                          value={itemForm.description}
+                          onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+                          placeholder="Enter detailed item description..."
+                        />
+                      </div>
+
+                      <div className={styles.formRow}>
+                        <div className={styles.formGroup}>
+                          <label>GST (%) *</label>
+                          <input
+                            type="number"
+                            required
+                            value={itemForm.gst}
+                            onChange={(e) => setItemForm({ ...itemForm, gst: Number(e.target.value) })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Unit *</label>
+                          <input
+                            type="text"
+                            required
+                            value={itemForm.unit}
+                            onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                            placeholder="e.g. NOS, KG, SET"
+                          />
+                        </div>
+                      </div>
+
+                      <div className={styles.formRow}>
+                        <div className={styles.formGroup}>
+                          <label>Rate (₹) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={itemForm.rate}
+                            onChange={(e) => setItemForm({ ...itemForm, rate: Number(e.target.value) })}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className={styles.formGroup}>
+                    <label>New Quantity</label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={itemForm.newQty || ''}
+                      onChange={(e) => setItemForm({ ...itemForm, newQty: Number(e.target.value) })}
+                    />
+                  </div>
+                  
+                  <div className={styles.modalActions}>
+                    <button
+                      type="button"
+                      className={styles.secondaryBtn}
+                      onClick={() => {
+                        if (searchStatus !== 'idle' && !editingItemId) {
+                          setSearchStatus('idle'); // Back to search
+                        } else {
+                          setIsModalOpen(false);
+                        }
+                      }}
+                    >
+                      {searchStatus !== 'idle' && !editingItemId ? 'Back' : 'Cancel'}
+                    </button>
+                    <button type="submit" className={styles.primaryBtn}>
+                      {editingItemId 
+                        ? 'Update Item' 
+                        : searchStatus === 'found' 
+                          ? 'Add Found Item to PO' 
+                          : 'Create & Add Item'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -6,4 +6,5 @@ import Purchase from "./purchase/Purchase";
 import PurchaseNew from "./purchase/PurchaseNew";
 import Location from "./location/Location";
 import POFormat from "./purchase/POFormat";
-export {Home, Register, Users, Purchase, PurchaseNew,Location, POFormat};
+import Store from "./store/Store";
+export {Home, Register, Users, Purchase, PurchaseNew,Location, POFormat, Store};
