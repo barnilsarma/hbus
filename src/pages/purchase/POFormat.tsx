@@ -117,7 +117,7 @@ export default function POFormat() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemForm, setItemForm] = useState<Item>(initialItemState);
-  
+
   // Search States
   const [searchMcode, setSearchMcode] = useState<string>('');
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
@@ -189,7 +189,7 @@ export default function POFormat() {
       toast.error('Please enter a Material Code');
       return;
     }
-    
+
     setSearchStatus('loading');
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`);
@@ -232,7 +232,7 @@ export default function POFormat() {
       if (editingItemId || searchStatus === 'found') {
         const targetId = editingItemId || itemForm._id;
         await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
-        
+
         if (searchStatus === 'found') {
           const currentItemIds = (poData?.items || []).map((it: any) =>
             typeof it === 'string' ? it : it._id,
@@ -244,7 +244,7 @@ export default function POFormat() {
             });
           }
         }
-        
+
         toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
       } else {
         const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, payload);
@@ -270,27 +270,26 @@ export default function POFormat() {
   };
 
   const handleDeleteItem = async (itemId: string) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    if (!window.confirm('Are you sure you want to remove this item from the Purchase Order?')) return;
 
     try {
+      // 1. Extract and filter remaining item IDs from the purchase
       const updatedItemIds = (poData?.items || [])
         .map((it: any) => (typeof it === 'string' ? it : it._id))
         .filter((itId: string) => itId !== itemId);
 
+      // 2. Send PUT request to update only the Purchase document's items array
       await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
         items: updatedItemIds,
       });
 
-      await axios.delete(`${import.meta.env.VITE_APP_API}/api/items/${itemId}`);
-
-      toast.success('Item deleted successfully.');
+      toast.success('Item removed from Purchase Order successfully.');
       await fetchPOData();
     } catch (error: any) {
-      console.error('Error deleting item:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete item.');
+      console.error('Error removing item from PO:', error);
+      toast.error(error.response?.data?.message || 'Failed to remove item from Purchase Order.');
     }
   };
-
   const handlePrint = () => {
     window.print();
   };
@@ -306,7 +305,7 @@ export default function POFormat() {
 
   const itemsList: Item[] = poData?.items || [];
   const totalWithoutTax = itemsList.reduce(
-    (sum, item) => sum + (item.rate || 0) * ((item.newQty || 0)-(item.receivedqtyNew || 0)),
+    (sum, item) => sum + (item.rate || 0) * ((item.newQty || 0) - (item.receivedqtyNew || 0)),
     0,
   );
 
@@ -584,9 +583,9 @@ export default function POFormat() {
                   <td className={styles.amountCol}>
                     {totalCGST > 0
                       ? totalCGST.toLocaleString('en-IN', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                       : ''}
                   </td>
                 </tr>
@@ -595,9 +594,9 @@ export default function POFormat() {
                   <td className={styles.amountCol}>
                     {totalSGST > 0
                       ? totalSGST.toLocaleString('en-IN', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                       : ''}
                   </td>
                 </tr>
@@ -606,9 +605,9 @@ export default function POFormat() {
                   <td className={styles.amountCol}>
                     {totalIGST > 0
                       ? totalIGST.toLocaleString('en-IN', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                       : ''}
                   </td>
                 </tr>
@@ -695,7 +694,7 @@ export default function POFormat() {
                 <FaTimes />
               </button>
             </div>
-            
+
             <div className={styles.modalBody}>
               <div className={styles.linkContainer} style={{ marginBottom: '15px' }}>
                 <Link to="/store" className={styles.catalogueLink} style={{ color: '#0056b3', textDecoration: 'underline' }}>
@@ -707,8 +706,8 @@ export default function POFormat() {
                 <div className={styles.searchSection} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <div className={styles.formGroup} style={{ flex: 1 }}>
                     <label>Search item by Material Code (e.g., H0001)</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={searchMcode}
                       onChange={(e) => setSearchMcode(e.target.value)}
                       placeholder="Enter MCode"
@@ -805,7 +804,7 @@ export default function POFormat() {
                       onChange={(e) => setItemForm({ ...itemForm, newQty: Number(e.target.value) })}
                     />
                   </div>
-                  
+
                   <div className={styles.modalActions}>
                     <button
                       type="button"
@@ -821,10 +820,10 @@ export default function POFormat() {
                       {searchStatus !== 'idle' && !editingItemId ? 'Back' : 'Cancel'}
                     </button>
                     <button type="submit" className={styles.primaryBtn}>
-                      {editingItemId 
-                        ? 'Update Item' 
-                        : searchStatus === 'found' 
-                          ? 'Add Found Item to PO' 
+                      {editingItemId
+                        ? 'Update Item'
+                        : searchStatus === 'found'
+                          ? 'Add Found Item to PO'
                           : 'Create & Add Item'}
                     </button>
                   </div>
