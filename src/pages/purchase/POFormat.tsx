@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch } from 'react-icons/fa';
+import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch, FaCheck } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
 
 type Item = {
@@ -13,7 +13,8 @@ type Item = {
   unit: string;
   rate: number;
   qty: number;
-  newQty?: number; // For adding new quantity in the PO context
+  newQty?: number;
+  receivedqtyNew?: number;
 };
 
 const initialItemState: Item = {
@@ -24,6 +25,7 @@ const initialItemState: Item = {
   rate: 0,
   qty: 0,
   newQty: 0,
+  receivedqtyNew: 0,
 };
 
 // Helper component to render individual character grid boxes
@@ -120,6 +122,9 @@ export default function POFormat() {
   const [searchMcode, setSearchMcode] = useState<string>('');
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
 
+  // State to handle Received Qty inline editing per item
+  const [receivedQtyInputs, setReceivedQtyInputs] = useState<{ [key: string]: number }>({});
+
   const fetchPOData = async () => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`);
@@ -135,6 +140,25 @@ export default function POFormat() {
   useEffect(() => {
     if (id) fetchPOData();
   }, [id]);
+
+  const handleUpdateReceivedQty = async (itemId: string) => {
+    const qtyToUpdate = receivedQtyInputs[itemId];
+    if (qtyToUpdate === undefined || isNaN(qtyToUpdate)) {
+      toast.error('Please enter a valid received quantity.');
+      return;
+    }
+
+    try {
+      await axios.put(`${import.meta.env.VITE_APP_API}/api/items/receivedqty/${itemId}`, {
+        receivedqtyNew: Number(qtyToUpdate),
+      });
+      toast.success('Received quantity updated successfully.');
+      await fetchPOData();
+    } catch (error: any) {
+      console.error('Error updating received quantity:', error);
+      toast.error(error.response?.data?.message || 'Failed to update received quantity.');
+    }
+  };
 
   const handleOpenAddModal = () => {
     setEditingItemId(null);
@@ -154,8 +178,9 @@ export default function POFormat() {
       unit: item.unit,
       rate: item.rate,
       qty: item.qty,
+      receivedqtyNew: item.receivedqtyNew ?? 0,
     });
-    setSearchStatus('idle'); // Skip search phase when editing
+    setSearchStatus('idle');
     setIsModalOpen(true);
   };
 
@@ -169,7 +194,6 @@ export default function POFormat() {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`);
       if (response.data) {
-        // Automatically default to qty 1 for the new PO context
         setItemForm({ ...response.data, qty: 1 });
         setSearchStatus('found');
         toast.success('Item found!');
@@ -187,13 +211,13 @@ export default function POFormat() {
       }
     }
   };
-const handleSaveItem = async (e: React.FormEvent) => {
+
+  const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const { _id: _, ...restPayload } = itemForm;
 
       const locationId = localStorage.getItem('hbus_selected_location_id');
-      console.log('Debugging Location ID from localStorage:', locationId);
 
       if (!locationId) {
         toast.error('Selected location not found in local storage. Please select a location first.');
@@ -205,12 +229,9 @@ const handleSaveItem = async (e: React.FormEvent) => {
         location: locationId,
       };
 
-      console.log('Final Payload being sent to API:', payload);
-
       if (editingItemId || searchStatus === 'found') {
         const targetId = editingItemId || itemForm._id;
-        const res = await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
-        console.log('Server response after item update:', res.data);
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
         
         if (searchStatus === 'found') {
           const currentItemIds = (poData?.items || []).map((it: any) =>
@@ -227,7 +248,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
         toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
       } else {
         const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, payload);
-        console.log('Server response after item creation:', itemRes.data);
         const newItemId = itemRes.data._id;
 
         const currentItemIds = (poData?.items || []).map((it: any) =>
@@ -248,11 +268,11 @@ const handleSaveItem = async (e: React.FormEvent) => {
       toast.error(error.response?.data?.message || 'Failed to save item.');
     }
   };
+
   const handleDeleteItem = async (itemId: string) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      // 1. Unlink item ID from Purchase document
       const updatedItemIds = (poData?.items || [])
         .map((it: any) => (typeof it === 'string' ? it : it._id))
         .filter((itId: string) => itId !== itemId);
@@ -261,7 +281,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
         items: updatedItemIds,
       });
 
-      // 2. Remove item document from database
       await axios.delete(`${import.meta.env.VITE_APP_API}/api/items/${itemId}`);
 
       toast.success('Item deleted successfully.');
@@ -280,20 +299,17 @@ const handleSaveItem = async (e: React.FormEvent) => {
     return <div className={styles.loadingContainer}>Loading Purchase Order...</div>;
   }
 
-  // Format Date for Boxed view (DD/MM/YYYY)
   const formattedDate =
     poData?.invoicedate || poData?.date
       ? new Date(poData.invoicedate || poData.date).toLocaleDateString('en-GB')
       : '';
 
-  // Dynamic Calculations based on items array
   const itemsList: Item[] = poData?.items || [];
   const totalWithoutTax = itemsList.reduce(
-    (sum, item) => sum + (item.rate || 0) * (item.newQty || 0),
+    (sum, item) => sum + (item.rate || 0) * ((item.newQty || 0)-(item.receivedqtyNew || 0)),
     0,
   );
 
-  // Check GST state (Assam Code: 18 / Assam state) to split CGST/SGST vs IGST
   const isIntraState =
     poData?.supplierStateCode === '18' ||
     (poData?.supplierState || '').toLowerCase().includes('assam');
@@ -317,7 +333,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
   const grandTotal = totalWithoutTax + totalTax;
   const roundOffTotal = Math.round(grandTotal);
 
-  // Delivery target date (30 days after PO Date)
   const poDateObj = poData?.invoicedate || poData?.date ? new Date(poData.invoicedate || poData.date) : new Date();
   const deliveryDateObj = new Date(poDateObj);
   deliveryDateObj.setDate(deliveryDateObj.getDate() + 30);
@@ -325,7 +340,7 @@ const handleSaveItem = async (e: React.FormEvent) => {
 
   return (
     <div className={styles.pageWrapper}>
-      {/* Action Controls Bar (Hidden during Print) */}
+      {/* Action Controls Bar */}
       <div className={`${styles.actionBar} ${styles.noPrint}`}>
         <button className={styles.secondaryBtn} onClick={() => navigate('/purchase')}>
           <FaArrowLeft /> Back to Purchases
@@ -342,7 +357,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
 
       {/* Main PO Document Sheet */}
       <div className={styles.poDocument}>
-        {/* Header Title */}
         <h1 className={styles.mainTitle}>PURCHASE ORDER</h1>
 
         {/* Company Header Row */}
@@ -408,12 +422,16 @@ const handleSaveItem = async (e: React.FormEvent) => {
         <table className={styles.itemsTable}>
           <thead>
             <tr>
-              <th style={{ width: '6%' }}>Sl No</th>
-              <th style={{ width: '44%' }}>Item Description</th>
-              <th style={{ width: '8%' }}>GST</th>
-              <th style={{ width: '8%' }}>Unit</th>
-              <th style={{ width: '12%' }}>Rate</th>
-              <th style={{ width: '7%' }}>Qty</th>
+              <th style={{ width: '5%' }}>Sl No</th>
+              <th style={{ width: '38%' }}>Item Description</th>
+              <th style={{ width: '7%' }}>GST</th>
+              <th style={{ width: '7%' }}>Unit</th>
+              <th style={{ width: '10%' }}>Rate</th>
+              <th style={{ width: '6%' }}>Qty</th>
+              {/* Received Qty Column - hidden during Print / PDF generation */}
+              <th className={styles.noPrint} style={{ width: '12%' }}>
+                Received Qty
+              </th>
               <th style={{ width: '15%' }}>Total Amount</th>
               <th className={styles.noPrint} style={{ width: '8%' }}>
                 Actions
@@ -423,7 +441,12 @@ const handleSaveItem = async (e: React.FormEvent) => {
           <tbody>
             {itemsList.length > 0 ? (
               itemsList.map((item: Item, index: number) => {
-                const totalAmount = (item.rate || 0) * (item.newQty || 0);
+                const totalAmount = (item.rate || 0) * ((item.newQty || 0) - (item.receivedqtyNew || 0));
+                const currentReceivedQty =
+                  receivedQtyInputs[item._id!] !== undefined
+                    ? receivedQtyInputs[item._id!]
+                    : (item.receivedqtyNew ?? 0);
+
                 return (
                   <tr key={item._id || index}>
                     <td className={styles.textCenter}>{index + 1}</td>
@@ -436,7 +459,42 @@ const handleSaveItem = async (e: React.FormEvent) => {
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className={styles.textCenter}>{item.newQty}</td>
+                    <td className={styles.textCenter}>{(item.newQty || 0) - (item.receivedqtyNew || 0)}</td>
+
+                    {/* Received Qty Cell (Interactive on UI, hidden in Print/PDF) */}
+                    <td className={`${styles.textCenter} ${styles.noPrint}`}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <input
+                          type="number"
+                          min={0}
+                          value={currentReceivedQty}
+                          onChange={(e) =>
+                            item._id &&
+                            setReceivedQtyInputs({
+                              ...receivedQtyInputs,
+                              [item._id]: Number(e.target.value),
+                            })
+                          }
+                          style={{
+                            width: '55px',
+                            padding: '3px',
+                            textAlign: 'center',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => item._id && handleUpdateReceivedQty(item._id)}
+                          className={styles.primaryBtn}
+                          style={{ padding: '4px 6px', fontSize: '11px' }}
+                          title="Update Received Quantity"
+                        >
+                          <FaCheck />
+                        </button>
+                      </div>
+                    </td>
+
                     <td className={styles.textRight}>
                       {totalAmount.toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
@@ -464,7 +522,7 @@ const handleSaveItem = async (e: React.FormEvent) => {
               })
             ) : (
               <tr>
-                <td colSpan={8} className={styles.emptyTableText}>
+                <td colSpan={9} className={styles.emptyTableText}>
                   No items added to this Purchase Order yet. Click "Add Item" above.
                 </td>
               </tr>
@@ -474,7 +532,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
 
         {/* Calculation Summary & Bank Details Block */}
         <div className={styles.summaryGrid}>
-          {/* Left Column: Words & Bank Details */}
           <div className={styles.summaryLeft}>
             <div className={styles.wordsRow}>
               <span className={styles.wordsLabel}>₹ (in words):</span>
@@ -506,7 +563,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
             </div>
           </div>
 
-          {/* Right Column: Amount Breakdowns */}
           <div className={styles.summaryRight}>
             <table className={styles.breakdownTable}>
               <tbody>
@@ -613,9 +669,7 @@ const handleSaveItem = async (e: React.FormEvent) => {
             <p className={styles.companySignTitle}>
               For H-BUS Equipment Manufacturing Company
             </p>
-            <div className={styles.signatureSpace}>
-              {/* Optional Signature image or space */}
-            </div>
+            <div className={styles.signatureSpace}></div>
             <p className={styles.signatoryLabel}>Authorised Signatory</p>
           </div>
         </div>
@@ -649,7 +703,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
                 </Link>
               </div>
 
-              {/* Only show search when ADDING a new item and before found/not-found */}
               {!editingItemId && searchStatus === 'idle' && (
                 <div className={styles.searchSection} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                   <div className={styles.formGroup} style={{ flex: 1 }}>
@@ -669,11 +722,8 @@ const handleSaveItem = async (e: React.FormEvent) => {
 
               {searchStatus === 'loading' && <p>Searching...</p>}
 
-              {/* Form rendering based on Search Status or Editing State */}
               {(editingItemId || searchStatus === 'found' || searchStatus === 'not-found') && (
                 <form onSubmit={handleSaveItem} className={styles.modalForm}>
-                  
-                  {/* If item was found, show read-only details to confirm */}
                   {searchStatus === 'found' && !editingItemId && (
                     <div className={styles.foundItemDetails} style={{ padding: '10px', background: '#f5f5f5', borderRadius: '5px', marginBottom: '15px' }}>
                       <p><strong>Material Code:</strong> {itemForm.mcode}</p>
@@ -684,7 +734,6 @@ const handleSaveItem = async (e: React.FormEvent) => {
                     </div>
                   )}
 
-                  {/* Standard Form Fields if not found or if editing */}
                   {(searchStatus === 'not-found' || editingItemId) && (
                     <>
                       <div className={styles.formGroup}>
@@ -763,7 +812,7 @@ const handleSaveItem = async (e: React.FormEvent) => {
                       className={styles.secondaryBtn}
                       onClick={() => {
                         if (searchStatus !== 'idle' && !editingItemId) {
-                          setSearchStatus('idle'); // Back to search
+                          setSearchStatus('idle');
                         } else {
                           setIsModalOpen(false);
                         }
