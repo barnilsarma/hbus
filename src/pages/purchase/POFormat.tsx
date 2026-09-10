@@ -5,16 +5,18 @@ import { toast } from 'sonner';
 import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch, FaCheck } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
 
+// 1. Updated Type: Allow string | number for form handling ease
 type Item = {
   _id?: string;
   mcode?: string;
   description: string;
-  gst: number;
+  gst: number | string;
   unit: string;
-  rate: number;
-  qty: number;
-  newQty?: number;
-  receivedqtyNew?: number;
+  rate: number | string;
+  qty: number | string;
+  newQty?: number | string;
+  receivedqtyNew?: number | string;
+  location?: string; // Optional location field for new items
 };
 
 const initialItemState: Item = {
@@ -28,7 +30,6 @@ const initialItemState: Item = {
   receivedqtyNew: 0,
 };
 
-// Helper component to render individual character grid boxes
 const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '', minLength = 0 }) => {
   const chars = text.split('');
   while (chars.length < minLength) {
@@ -46,7 +47,6 @@ const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '',
   );
 };
 
-// Helper: Convert number to Indian Currency Words (Rupees & Paise)
 const numberToIndianWords = (num: number): string => {
   if (isNaN(num) || num < 0) return '';
   const [rupeesStr, paiseStr] = num.toFixed(2).split('.');
@@ -113,16 +113,13 @@ export default function POFormat() {
   const [poData, setPoData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Modal & Form state for Adding/Editing Items
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemForm, setItemForm] = useState<Item>(initialItemState);
 
-  // Search States
   const [searchMcode, setSearchMcode] = useState<string>('');
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
 
-  // State to handle Received Qty inline editing per item
   const [receivedQtyInputs, setReceivedQtyInputs] = useState<{ [key: string]: number }>({});
 
   const fetchPOData = async () => {
@@ -178,6 +175,7 @@ export default function POFormat() {
       unit: item.unit,
       rate: item.rate,
       qty: item.qty,
+      newQty: item.newQty ?? 0, // 2. FIXED: Populate newQty during edit!
       receivedqtyNew: item.receivedqtyNew ?? 0,
     });
     setSearchStatus('idle');
@@ -194,7 +192,7 @@ export default function POFormat() {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`);
       if (response.data) {
-        setItemForm({ ...response.data, qty: 1 });
+        setItemForm({ ...response.data});
         setSearchStatus('found');
         toast.success('Item found!');
       } else {
@@ -213,72 +211,74 @@ export default function POFormat() {
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { _id: _, ...restPayload } = itemForm;
+  e.preventDefault();
+  try {
+    // 1. Destructure both _id and location out of itemForm so existing/populated location objects are removed
+    const { _id: _, ...restPayload } = itemForm;
 
-      const locationId = localStorage.getItem('hbus_selected_location_id');
+    const locationId = localStorage.getItem('hbus_selected_location_id');
 
-      if (!locationId) {
-        toast.error('Selected location not found in local storage. Please select a location first.');
-        return;
-      }
+    if (!locationId) {
+      toast.error('Selected location not found in local storage. Please select a location first.');
+      return;
+    }
+    
+    // 2. Explicitly assign locationId from localStorage
+    const payload = {
+      ...restPayload,
+      qty: Number(restPayload.qty),
+      rate: Number(restPayload.rate),
+      gst: Number(restPayload.gst),
+      newQty: Number(restPayload.newQty),
+      location: locationId,
+    };
+    if (editingItemId || searchStatus === 'found') {
+      const targetId = editingItemId || itemForm._id;
+      await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
 
-      const payload = {
-        ...restPayload,
-        location: locationId,
-      };
-
-      if (editingItemId || searchStatus === 'found') {
-        const targetId = editingItemId || itemForm._id;
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
-
-        if (searchStatus === 'found') {
-          const currentItemIds = (poData?.items || []).map((it: any) =>
-            typeof it === 'string' ? it : it._id,
-          );
-          if (!currentItemIds.includes(targetId)) {
-            const updatedItemIds = [...currentItemIds, targetId];
-            await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-              items: updatedItemIds,
-            });
-          }
-        }
-
-        toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
-      } else {
-        const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, payload);
-        const newItemId = itemRes.data._id;
-
+      if (searchStatus === 'found') {
         const currentItemIds = (poData?.items || []).map((it: any) =>
           typeof it === 'string' ? it : it._id,
         );
-        const updatedItemIds = [...currentItemIds, newItemId];
-
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-          items: updatedItemIds,
-        });
-        toast.success('New item created and added to PO.');
+        if (!currentItemIds.includes(targetId)) {
+          const updatedItemIds = [...currentItemIds, targetId];
+          await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
+            items: updatedItemIds,
+          });
+        }
       }
 
-      await fetchPOData();
-      setIsModalOpen(false);
-    } catch (error: any) {
-      console.error('Error saving item:', error);
-      toast.error(error.response?.data?.message || 'Failed to save item.');
-    }
-  };
+      toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
+    } else {
+      const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, payload);
+      const newItemId = itemRes.data._id;
 
+      const currentItemIds = (poData?.items || []).map((it: any) =>
+        typeof it === 'string' ? it : it._id,
+      );
+      const updatedItemIds = [...currentItemIds, newItemId];
+
+      await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
+        items: updatedItemIds,
+      });
+      toast.success('New item created and added to PO.');
+    }
+
+    await fetchPOData();
+    setIsModalOpen(false);
+  } catch (error: any) {
+    console.error('Error saving item:', error);
+    toast.error(error.response?.data?.message || 'Failed to save item.');
+  }
+};
   const handleDeleteItem = async (itemId: string) => {
     if (!window.confirm('Are you sure you want to remove this item from the Purchase Order?')) return;
 
     try {
-      // 1. Extract and filter remaining item IDs from the purchase
       const updatedItemIds = (poData?.items || [])
         .map((it: any) => (typeof it === 'string' ? it : it._id))
         .filter((itId: string) => itId !== itemId);
 
-      // 2. Send PUT request to update only the Purchase document's items array
       await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
         items: updatedItemIds,
       });
@@ -290,6 +290,7 @@ export default function POFormat() {
       toast.error(error.response?.data?.message || 'Failed to remove item from Purchase Order.');
     }
   };
+
   const handlePrint = () => {
     window.print();
   };
@@ -305,7 +306,7 @@ export default function POFormat() {
 
   const itemsList: Item[] = poData?.items || [];
   const totalWithoutTax = itemsList.reduce(
-    (sum, item) => sum + (item.rate || 0) * ((item.newQty || 0) - (item.receivedqtyNew || 0)),
+    (sum, item) => sum + Number(item.rate || 0) * (Number(item.newQty || 0) - Number(item.receivedqtyNew || 0)),
     0,
   );
 
@@ -318,8 +319,8 @@ export default function POFormat() {
   let totalIGST = 0;
 
   itemsList.forEach((item) => {
-    const itemTotal = (item.rate || 0) * (item.newQty || 0);
-    const taxAmount = itemTotal * ((item.gst || 0) / 100);
+    const itemTotal = Number(item.rate || 0) * Number(item.newQty || 0);
+    const taxAmount = itemTotal * (Number(item.gst || 0) / 100);
     if (isIntraState) {
       totalCGST += taxAmount / 2;
       totalSGST += taxAmount / 2;
@@ -440,11 +441,11 @@ export default function POFormat() {
           <tbody>
             {itemsList.length > 0 ? (
               itemsList.map((item: Item, index: number) => {
-                const totalAmount = (item.rate || 0) * ((item.newQty || 0) - (item.receivedqtyNew || 0));
+                const totalAmount = Number(item.rate || 0) * (Number(item.newQty || 0) - Number(item.receivedqtyNew || 0));
                 const currentReceivedQty =
                   receivedQtyInputs[item._id!] !== undefined
                     ? receivedQtyInputs[item._id!]
-                    : (item.receivedqtyNew ?? 0);
+                    : (Number(item.receivedqtyNew) ?? 0);
 
                 return (
                   <tr key={item._id || index}>
@@ -458,7 +459,7 @@ export default function POFormat() {
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className={styles.textCenter}>{(item.newQty || 0) - (item.receivedqtyNew || 0)}</td>
+                    <td className={styles.textCenter}>{Number(item.newQty || 0) - Number(item.receivedqtyNew || 0)}</td>
 
                     {/* Received Qty Cell (Interactive on UI, hidden in Print/PDF) */}
                     <td className={`${styles.textCenter} ${styles.noPrint}`}>
@@ -471,7 +472,7 @@ export default function POFormat() {
                             item._id &&
                             setReceivedQtyInputs({
                               ...receivedQtyInputs,
-                              [item._id]: Number(e.target.value),
+                              [item._id]: e.target.value === '' ? 0 : Number(e.target.value),
                             })
                           }
                           style={{
@@ -760,11 +761,12 @@ export default function POFormat() {
                       <div className={styles.formRow}>
                         <div className={styles.formGroup}>
                           <label>GST (%) *</label>
+                          {/* 4. Removed strict Number() coercing in onChange */}
                           <input
                             type="number"
                             required
-                            value={itemForm.gst}
-                            onChange={(e) => setItemForm({ ...itemForm, gst: Number(e.target.value) })}
+                            value={itemForm.gst ?? ''}
+                            onChange={(e) => setItemForm({ ...itemForm, gst: e.target.value })}
                           />
                         </div>
                         <div className={styles.formGroup}>
@@ -786,8 +788,8 @@ export default function POFormat() {
                             type="number"
                             step="0.01"
                             required
-                            value={itemForm.rate}
-                            onChange={(e) => setItemForm({ ...itemForm, rate: Number(e.target.value) })}
+                            value={itemForm.rate ?? ''}
+                            onChange={(e) => setItemForm({ ...itemForm, rate: e.target.value })}
                           />
                         </div>
                       </div>
@@ -799,9 +801,8 @@ export default function POFormat() {
                     <input
                       type="number"
                       required
-                      min={1}
-                      value={itemForm.newQty || ''}
-                      onChange={(e) => setItemForm({ ...itemForm, newQty: Number(e.target.value) })}
+                      value={itemForm.newQty ?? ''}
+                      onChange={(e) => setItemForm({ ...itemForm, newQty: e.target.value })}
                     />
                   </div>
 

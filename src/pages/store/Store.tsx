@@ -48,6 +48,7 @@ const Store: React.FC = () => {
       const response = await axios.get(
         `${import.meta.env.VITE_APP_API}/api/items/location/${locationId}`
       );
+      console.log(response.data);
       setItems(response.data);
     } catch (error) {
       console.error('Error fetching items for location:', error);
@@ -63,6 +64,7 @@ const Store: React.FC = () => {
     setUserType(type);
 
     const savedLocationId = localStorage.getItem('hbus_selected_location_id') || '';
+    setSelectedLocationId(savedLocationId);
 
     if (type === 'A') {
       axios
@@ -159,7 +161,6 @@ const Store: React.FC = () => {
       alert(error.response?.data?.message || 'Failed to delete item.');
     }
   };
-
   const filteredItems = items.filter(
     (item) =>
       item.mcode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
