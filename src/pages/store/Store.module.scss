@@ -92,6 +92,98 @@
     }
   }
 
+  .receiptSection {
+    margin: 0 0 28px;
+    padding: 20px;
+    border: 1px solid #dbe4ee;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+    .receiptHeader {
+      margin-bottom: 16px;
+
+      h2 {
+        margin: 0 0 5px;
+        color: #1a1a1a;
+        font-size: 19px;
+      }
+
+      p {
+        margin: 0;
+        color: #666;
+        font-size: 13px;
+      }
+    }
+
+    .receiptStatus {
+      margin: 0;
+      padding: 18px 0 4px;
+      color: #666;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .receiptTable {
+      min-width: 900px;
+
+      th,
+      td {
+        vertical-align: middle;
+      }
+
+      .poNumber {
+        font-weight: 700;
+        color: #333;
+      }
+
+      .receiptQty {
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .receivedQtyInput {
+        width: 105px;
+        box-sizing: border-box;
+        padding: 7px 8px;
+        border: 1px solid #cbd5df;
+        border-radius: 5px;
+        text-align: center;
+        font: inherit;
+
+        &:focus {
+          outline: none;
+          border-color: #0056b3;
+          box-shadow: 0 0 0 2px rgba(0, 86, 179, 0.12);
+        }
+      }
+
+      .saveReceiptBtn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 5px;
+        background: #0056b3;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+          background: #004085;
+        }
+
+        &:disabled {
+          cursor: wait;
+          opacity: 0.65;
+        }
+      }
+    }
+  }
+
   .tableWrapper {
     overflow-x: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);

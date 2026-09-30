@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch, FaCheck } from 'react-icons/fa';
+import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
 
 // 1. Updated Type: Allow string | number for form handling ease
@@ -120,8 +120,6 @@ export default function POFormat() {
   const [searchMcode, setSearchMcode] = useState<string>('');
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
 
-  const [receivedQtyInputs, setReceivedQtyInputs] = useState<{ [key: string]: number }>({});
-
   const fetchPOData = async () => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`);
@@ -137,25 +135,6 @@ export default function POFormat() {
   useEffect(() => {
     if (id) fetchPOData();
   }, [id]);
-
-  const handleUpdateReceivedQty = async (itemId: string) => {
-    const qtyToUpdate = receivedQtyInputs[itemId];
-    if (qtyToUpdate === undefined || isNaN(qtyToUpdate)) {
-      toast.error('Please enter a valid received quantity.');
-      return;
-    }
-
-    try {
-      await axios.put(`${import.meta.env.VITE_APP_API}/api/items/receivedqty/${itemId}`, {
-        receivedqtyNew: Number(qtyToUpdate),
-      });
-      toast.success('Received quantity updated successfully.');
-      await fetchPOData();
-    } catch (error: any) {
-      console.error('Error updating received quantity:', error);
-      toast.error(error.response?.data?.message || 'Failed to update received quantity.');
-    }
-  };
 
   const handleOpenAddModal = () => {
     setEditingItemId(null);
@@ -428,10 +407,6 @@ export default function POFormat() {
               <th style={{ width: '7%' }}>Unit</th>
               <th style={{ width: '10%' }}>Rate</th>
               <th style={{ width: '6%' }}>Qty</th>
-              {/* Received Qty Column - hidden during Print / PDF generation */}
-              <th className={styles.noPrint} style={{ width: '12%' }}>
-                Received Qty
-              </th>
               <th style={{ width: '15%' }}>Total Amount</th>
               <th className={styles.noPrint} style={{ width: '8%' }}>
                 Actions
@@ -442,11 +417,6 @@ export default function POFormat() {
             {itemsList.length > 0 ? (
               itemsList.map((item: Item, index: number) => {
                 const totalAmount = Number(item.rate || 0) * (Number(item.newQty || 0) - Number(item.receivedqtyNew || 0));
-                const currentReceivedQty =
-                  receivedQtyInputs[item._id!] !== undefined
-                    ? receivedQtyInputs[item._id!]
-                    : (Number(item.receivedqtyNew) ?? 0);
-
                 return (
                   <tr key={item._id || index}>
                     <td className={styles.textCenter}>{index + 1}</td>
@@ -460,40 +430,6 @@ export default function POFormat() {
                       })}
                     </td>
                     <td className={styles.textCenter}>{Number(item.newQty || 0) - Number(item.receivedqtyNew || 0)}</td>
-
-                    {/* Received Qty Cell (Interactive on UI, hidden in Print/PDF) */}
-                    <td className={`${styles.textCenter} ${styles.noPrint}`}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                        <input
-                          type="number"
-                          min={0}
-                          value={currentReceivedQty}
-                          onChange={(e) =>
-                            item._id &&
-                            setReceivedQtyInputs({
-                              ...receivedQtyInputs,
-                              [item._id]: e.target.value === '' ? 0 : Number(e.target.value),
-                            })
-                          }
-                          style={{
-                            width: '55px',
-                            padding: '3px',
-                            textAlign: 'center',
-                            border: '1px solid #ccc',
-                            borderRadius: '4px',
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => item._id && handleUpdateReceivedQty(item._id)}
-                          className={styles.primaryBtn}
-                          style={{ padding: '4px 6px', fontSize: '11px' }}
-                          title="Update Received Quantity"
-                        >
-                          <FaCheck />
-                        </button>
-                      </div>
-                    </td>
 
                     <td className={styles.textRight}>
                       {totalAmount.toLocaleString('en-IN', {
@@ -522,7 +458,7 @@ export default function POFormat() {
               })
             ) : (
               <tr>
-                <td colSpan={9} className={styles.emptyTableText}>
+                <td colSpan={8} className={styles.emptyTableText}>
                   No items added to this Purchase Order yet. Click "Add Item" above.
                 </td>
               </tr>

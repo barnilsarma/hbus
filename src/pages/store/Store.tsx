@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { FaPlus, FaPencilAlt, FaTrash, FaTimes } from 'react-icons/fa';
+import { toast } from 'sonner';
+import { FaPlus, FaPencilAlt, FaTrash, FaTimes, FaCheck } from 'react-icons/fa';
 import styles from './Store.module.scss';
 
 export interface Location {
@@ -17,8 +18,48 @@ export interface Item {
   unit: string;
   rate: number;
   qty: number;
+  newQty?: number | string;
+  receivedqtyOriginal?: number | string;
+  receivedqtyNew?: number | string;
   location?: Location | string;
 }
+
+type PurchaseOrder = {
+  _id?: string;
+  id?: string;
+  PONumber?: string;
+  supplier?: string;
+  status?: string;
+  location?: Location | string;
+  locationId?: string;
+  items?: Array<Item | string>;
+};
+
+type ReceiptRow = {
+  key: string;
+  purchaseOrder: PurchaseOrder;
+  item: Item;
+};
+
+const getEntityId = (value: unknown): string | null => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const entity = value as { _id?: unknown; id?: unknown };
+    return (typeof entity._id === 'string' && entity._id) || (typeof entity.id === 'string' && entity.id) || null;
+  }
+  return null;
+};
+
+const getLocationId = (value: unknown): string | null => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const location = value as { _id?: unknown; id?: unknown };
+    return (typeof location._id === 'string' && location._id) || (typeof location.id === 'string' && location.id) || null;
+  }
+  return null;
+};
+
+const getResponseData = (responseData: any) => responseData?.data ?? responseData?.purchase ?? responseData;
 
 const initialItemState: Item = {
   mcode: '',
@@ -31,6 +72,9 @@ const initialItemState: Item = {
 
 const Store: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
+  const [activePurchaseOrders, setActivePurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [receivedQtyInputs, setReceivedQtyInputs] = useState<Record<string, string>>({});
+  const [savingReceiptItemId, setSavingReceiptItemId] = useState<string | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [userType, setUserType] = useState<string>('');
@@ -44,14 +88,65 @@ const Store: React.FC = () => {
 
   const fetchItemsByLocation = async (locationId: string) => {
     setLoading(true);
+
+    // Check active POs first, then load each PO's populated item details.
+    let purchaseOrders: PurchaseOrder[] = [];
+    try {
+      const purchasesResponse = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases`);
+      const purchasesData = getResponseData(purchasesResponse.data);
+      const allPurchases: PurchaseOrder[] = Array.isArray(purchasesData) ? purchasesData : [];
+      const activePurchases = allPurchases.filter((purchase) => {
+        const status = (purchase.status || '').trim().toUpperCase();
+        const purchaseLocationId = getLocationId(purchase.location) || purchase.locationId;
+        return status !== 'COMPLETE' && (!purchaseLocationId || purchaseLocationId === locationId);
+      });
+
+      purchaseOrders = await Promise.all(
+        activePurchases.map(async (purchase) => {
+          const purchaseId = getEntityId(purchase);
+          if (!purchaseId) return purchase;
+
+          try {
+            const detailResponse = await axios.get(
+              `${import.meta.env.VITE_APP_API}/api/purchases/${purchaseId}`,
+            );
+            return getResponseData(detailResponse.data) as PurchaseOrder;
+          } catch (error) {
+            console.error(`Error loading purchase order ${purchaseId}:`, error);
+            return purchase;
+          }
+        }),
+      );
+    } catch (error) {
+      console.error('Error checking active purchase orders:', error);
+      toast.error('Could not check active purchase orders.');
+    }
+
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_APP_API}/api/items/location/${locationId}`
+        `${import.meta.env.VITE_APP_API}/api/items/location/${locationId}`,
       );
-      console.log(response.data);
-      setItems(response.data);
+      const locationItems: Item[] = Array.isArray(response.data) ? response.data : [];
+      const itemIds = new Set(locationItems.map((item) => item._id).filter(Boolean));
+
+      setItems(locationItems);
+      setActivePurchaseOrders(
+        purchaseOrders.filter((purchase) => {
+          const purchaseLocationId = getLocationId(purchase.location) || purchase.locationId;
+          const isForLocation = !purchaseLocationId || purchaseLocationId === locationId;
+          const purchaseItems = Array.isArray(purchase.items) ? purchase.items : [];
+          const hasItemsInStore = purchaseItems.some((purchaseItem) => {
+            if (purchaseItem && typeof purchaseItem === 'object') return true;
+            const purchaseItemId = getEntityId(purchaseItem);
+            return Boolean(purchaseItemId && itemIds.has(purchaseItemId));
+          });
+
+          return isForLocation && hasItemsInStore;
+        }),
+      );
     } catch (error) {
       console.error('Error fetching items for location:', error);
+      toast.error('Failed to load items for this location.');
     } finally {
       setLoading(false);
     }
@@ -87,6 +182,8 @@ const Store: React.FC = () => {
     if (selectedLocationId) {
       fetchItemsByLocation(selectedLocationId);
     } else {
+      setItems([]);
+      setActivePurchaseOrders([]);
       setLoading(false);
     }
   }, [selectedLocationId]);
@@ -161,6 +258,69 @@ const Store: React.FC = () => {
       alert(error.response?.data?.message || 'Failed to delete item.');
     }
   };
+
+  const handleUpdateReceivedQty = async (itemId: string, currentReceivedQty: number) => {
+    const inputValue = receivedQtyInputs[itemId] ?? String(currentReceivedQty);
+    const qtyToUpdate = Number(inputValue);
+    if (inputValue.trim() === '' || !Number.isFinite(qtyToUpdate) || qtyToUpdate < 0) {
+      toast.error('Enter a valid received quantity.');
+      return;
+    }
+
+    setSavingReceiptItemId(itemId);
+    try {
+      await axios.put(`${import.meta.env.VITE_APP_API}/api/items/receivedqty/${itemId}`, {
+        receivedqtyNew: qtyToUpdate,
+      });
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item._id === itemId ? { ...item, receivedqtyNew: qtyToUpdate } : item,
+        ),
+      );
+      setActivePurchaseOrders((currentPurchases) =>
+        currentPurchases.map((purchase) => ({
+          ...purchase,
+          items: purchase.items?.map((purchaseItem) =>
+            getEntityId(purchaseItem) === itemId && typeof purchaseItem === 'object'
+              ? { ...purchaseItem, receivedqtyNew: qtyToUpdate }
+              : purchaseItem,
+          ),
+        })),
+      );
+      setReceivedQtyInputs((currentInputs) => ({ ...currentInputs, [itemId]: String(qtyToUpdate) }));
+      toast.success('Received quantity updated.');
+    } catch (error: any) {
+      console.error('Error updating received quantity:', error);
+      toast.error(error.response?.data?.message || 'Failed to update received quantity.');
+    } finally {
+      setSavingReceiptItemId(null);
+    }
+  };
+
+  const receiptRows: ReceiptRow[] = activePurchaseOrders.flatMap((purchaseOrder, purchaseIndex) => {
+    const purchaseItems = Array.isArray(purchaseOrder.items) ? purchaseOrder.items : [];
+    return purchaseItems.flatMap((purchaseItem, itemIndex) => {
+      const itemId = getEntityId(purchaseItem);
+      const catalogueItem = items.find((item) => item._id === itemId);
+      const purchaseItemDetails =
+        purchaseItem && typeof purchaseItem === 'object' ? purchaseItem : undefined;
+      if (!itemId || (!catalogueItem && !purchaseItemDetails)) return [];
+
+      const item = {
+        ...(catalogueItem || {}),
+        ...(purchaseItemDetails || {}),
+        _id: itemId,
+      } as Item;
+      const purchaseOrderId = getEntityId(purchaseOrder) || `purchase-${purchaseIndex}`;
+
+      return [{
+        key: `${purchaseOrderId}-${itemId}-${itemIndex}`,
+        purchaseOrder,
+        item,
+      }];
+    });
+  });
+
   const filteredItems = items.filter(
     (item) =>
       item.mcode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -211,6 +371,86 @@ const Store: React.FC = () => {
         </div>
       </div>
 
+      {selectedLocationId && (
+        <section className={styles.receiptSection} aria-labelledby="receipt-heading">
+          <div className={styles.receiptHeader}>
+            <div>
+              <h2 id="receipt-heading">Purchase Order Receipts</h2>
+              <p>Record the total quantity received so far for items on active purchase orders.</p>
+            </div>
+          </div>
+
+          {loading ? (
+            <p className={styles.receiptStatus}>Checking active purchase orders...</p>
+          ) : receiptRows.length > 0 ? (
+            <div className={styles.tableWrapper}>
+              <table className={`${styles.itemsTable} ${styles.receiptTable}`}>
+                <thead>
+                  <tr>
+                    <th>PO Number</th>
+                    <th>Supplier</th>
+                    <th>Material Code</th>
+                    <th>Item</th>
+                    <th>Ordered</th>
+                    <th>Received to Date</th>
+                    <th>Remaining</th>
+                    <th>Update</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receiptRows.map(({ key, purchaseOrder, item }) => {
+                    const itemId = item._id!;
+                    const orderedQty = Number(item.newQty || 0);
+                    const receivedQty = Number(item.receivedqtyNew || 0);
+                    const inputValue = receivedQtyInputs[itemId] ?? String(receivedQty);
+
+                    return (
+                      <tr key={key}>
+                        <td className={styles.poNumber}>{purchaseOrder.PONumber || '-'}</td>
+                        <td>{purchaseOrder.supplier || '-'}</td>
+                        <td className={styles.mcode}>{item.mcode || '-'}</td>
+                        <td className={styles.desc}>{item.description || '-'}</td>
+                        <td className={styles.receiptQty}>{orderedQty}</td>
+                        <td>
+                          <input
+                            className={styles.receivedQtyInput}
+                            type="number"
+                            min="0"
+                            step="any"
+                            aria-label={`Received quantity for ${item.description || item.mcode}`}
+                            value={inputValue}
+                            onChange={(event) =>
+                              setReceivedQtyInputs((currentInputs) => ({
+                                ...currentInputs,
+                                [itemId]: event.target.value,
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className={styles.receiptQty}>{orderedQty - receivedQty}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.saveReceiptBtn}
+                            onClick={() => handleUpdateReceivedQty(itemId, receivedQty)}
+                            disabled={savingReceiptItemId === itemId}
+                            title="Update received quantity"
+                          >
+                            <FaCheck /> {savingReceiptItemId === itemId ? 'Saving' : 'Save'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className={styles.receiptStatus}>No active purchase orders with items were found for this location.</p>
+          )}
+        </section>
+      )}
+
       {loading ? (
         <p className={styles.statusMessage}>Loading items...</p>
       ) : !selectedLocationId ? (
@@ -247,7 +487,9 @@ const Store: React.FC = () => {
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className={styles.qty}>{item.qty ?? 0}</td>
+                    <td className={styles.qty}>
+                      {Number(item.qty || 0) + Number(item.receivedqtyNew || 0)}
+                    </td>
                     <td className={styles.actionsCell}>
                       <div className={styles.actionBtns}>
                         <button
