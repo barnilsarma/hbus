@@ -27,7 +27,19 @@
         display: flex;
         align-items: center;
         gap: 8px;
-
+        .locationSelect {
+          padding: 8px 12px;
+          border-radius: 6px;
+          border: 1px solid #ccc;
+          font-size: 14px;
+          cursor: pointer;
+          background-color: #fff;
+          color:#000;
+          &:focus {
+            outline: none;
+            border-color: #0056b3;
+          }
+        }
         label {
           font-weight: bold;
           font-size: 14px;
@@ -403,7 +415,8 @@
           }
 
           input,
-          textarea {
+          textarea,
+          select {
             padding: 8px 12px;
             border: 1px solid #ccc;
             border-radius: 6px;

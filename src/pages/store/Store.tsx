@@ -10,8 +10,11 @@ export interface Location {
   address?: string;
 }
 
+type ItemType = 'PRIMARY' | 'SECONDARY';
+
 export interface Item {
   _id?: string;
+  type?: ItemType;
   mcode: string;
   description: string;
   gst: number;
@@ -24,6 +27,10 @@ export interface Item {
   location?: Location | string;
 }
 
+type ItemForm = Omit<Item, 'type'> & {
+  type: ItemType | '';
+};
+
 type PurchaseOrder = {
   _id?: string;
   id?: string;
@@ -32,6 +39,7 @@ type PurchaseOrder = {
   status?: string;
   location?: Location | string;
   locationId?: string;
+  locationID?: string;
   items?: Array<Item | string>;
 };
 
@@ -59,15 +67,24 @@ const getLocationId = (value: unknown): string | null => {
   return null;
 };
 
+const getPurchaseLocationId = (purchase: PurchaseOrder): string | null =>
+  getLocationId(purchase.location) ??
+  getLocationId(purchase.locationId) ??
+  getLocationId(purchase.locationID);
+
 const getResponseData = (responseData: any) => responseData?.data ?? responseData?.purchase ?? responseData;
 
-const initialItemState: Item = {
+const initialItemState: ItemForm = {
+  type: '',
   mcode: '',
   description: '',
   gst: 18,
   unit: 'NOS',
   rate: 0,
   qty: 0,
+  newQty: 0,
+  receivedqtyOriginal: 0,
+  receivedqtyNew: 0,
 };
 
 const Store: React.FC = () => {
@@ -84,7 +101,7 @@ const Store: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemForm, setItemForm] = useState<Item>(initialItemState);
+  const [itemForm, setItemForm] = useState<ItemForm>(initialItemState);
 
   const fetchItemsByLocation = async (locationId: string) => {
     setLoading(true);
@@ -97,8 +114,7 @@ const Store: React.FC = () => {
       const allPurchases: PurchaseOrder[] = Array.isArray(purchasesData) ? purchasesData : [];
       const activePurchases = allPurchases.filter((purchase) => {
         const status = (purchase.status || '').trim().toUpperCase();
-        const purchaseLocationId = getLocationId(purchase.location) || purchase.locationId;
-        return status !== 'COMPLETE' && (!purchaseLocationId || purchaseLocationId === locationId);
+        return status !== 'COMPLETE' && getPurchaseLocationId(purchase) === locationId;
       });
 
       purchaseOrders = await Promise.all(
@@ -110,7 +126,14 @@ const Store: React.FC = () => {
             const detailResponse = await axios.get(
               `${import.meta.env.VITE_APP_API}/api/purchases/${purchaseId}`,
             );
-            return getResponseData(detailResponse.data) as PurchaseOrder;
+            const purchaseDetails = getResponseData(detailResponse.data) as PurchaseOrder;
+            return {
+              ...purchase,
+              ...purchaseDetails,
+              location: purchaseDetails.location ?? purchase.location,
+              locationId: purchaseDetails.locationId ?? purchase.locationId,
+              locationID: purchaseDetails.locationID ?? purchase.locationID,
+            };
           } catch (error) {
             console.error(`Error loading purchase order ${purchaseId}:`, error);
             return purchase;
@@ -126,22 +149,22 @@ const Store: React.FC = () => {
       const response = await axios.get(
         `${import.meta.env.VITE_APP_API}/api/items/location/${locationId}`,
       );
-      const locationItems: Item[] = Array.isArray(response.data) ? response.data : [];
+      const responseItems = getResponseData(response.data);
+      const locationItems: Item[] = Array.isArray(responseItems)
+        ? responseItems
+        : [];
       const itemIds = new Set(locationItems.map((item) => item._id).filter(Boolean));
 
       setItems(locationItems);
       setActivePurchaseOrders(
         purchaseOrders.filter((purchase) => {
-          const purchaseLocationId = getLocationId(purchase.location) || purchase.locationId;
-          const isForLocation = !purchaseLocationId || purchaseLocationId === locationId;
           const purchaseItems = Array.isArray(purchase.items) ? purchase.items : [];
           const hasItemsInStore = purchaseItems.some((purchaseItem) => {
-            if (purchaseItem && typeof purchaseItem === 'object') return true;
             const purchaseItemId = getEntityId(purchaseItem);
             return Boolean(purchaseItemId && itemIds.has(purchaseItemId));
           });
 
-          return isForLocation && hasItemsInStore;
+          return getPurchaseLocationId(purchase) === locationId && hasItemsInStore;
         }),
       );
     } catch (error) {
@@ -155,26 +178,52 @@ const Store: React.FC = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const parsedUser = storedUser ? JSON.parse(storedUser) : null;
-    const type = localStorage.getItem('user_type') || parsedUser?.type || parsedUser?.role || '';
+    const type = (
+      localStorage.getItem('hbus_user_role') ||
+      localStorage.getItem('user_type') ||
+      parsedUser?.type ||
+      parsedUser?.role ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
     setUserType(type);
 
     const savedLocationId = localStorage.getItem('hbus_selected_location_id') || '';
-    setSelectedLocationId(savedLocationId);
 
     if (type === 'A') {
       axios
-        .get(`${import.meta.env.VITE_APP_API}/api/locations`)
+        .get(`${import.meta.env.VITE_APP_API}/api/location`)
         .then((response) => {
-          setLocations(response.data);
-          if (savedLocationId && response.data.some((loc: Location) => loc._id === savedLocationId)) {
-            setSelectedLocationId(savedLocationId);
-          } else if (response.data.length > 0) {
-            setSelectedLocationId(response.data[0]._id);
+          const locationsData = getResponseData(response.data);
+          const availableLocations: Location[] = Array.isArray(locationsData)
+            ? locationsData
+            : Array.isArray(locationsData?.locations)
+              ? locationsData.locations
+            : [];
+          setLocations(availableLocations);
+          const savedLocationIsValid = availableLocations.some(
+            (location) => location._id === savedLocationId,
+          );
+          const nextLocationId = savedLocationIsValid
+            ? savedLocationId
+            : availableLocations[0]?._id || '';
+          setSelectedLocationId(nextLocationId);
+          if (nextLocationId) {
+            localStorage.setItem('hbus_selected_location_id', nextLocationId);
+          } else {
+            localStorage.removeItem('hbus_selected_location_id');
           }
         })
-        .catch((error) => console.error('Error fetching locations:', error));
+        .catch((error) => {
+          console.error('Error fetching locations:', error);
+          toast.error('Failed to load locations.');
+        });
     } else {
-      setSelectedLocationId(savedLocationId);
+      const validSavedLocationId = savedLocationId && savedLocationId !== 'ALL'
+        ? savedLocationId
+        : '';
+      setSelectedLocationId(validSavedLocationId);
     }
   }, []);
 
@@ -203,12 +252,16 @@ const Store: React.FC = () => {
   const handleOpenEditModal = (item: Item) => {
     setEditingItemId(item._id || null);
     setItemForm({
+      type: item.type || '',
       mcode: item.mcode,
       description: item.description,
       gst: item.gst,
       unit: item.unit,
       rate: item.rate,
       qty: item.qty ?? 0,
+      newQty: item.newQty ?? 0,
+      receivedqtyOriginal: item.receivedqtyOriginal ?? 0,
+      receivedqtyNew: item.receivedqtyNew ?? 0,
     });
     setIsModalOpen(true);
   };
@@ -219,6 +272,10 @@ const Store: React.FC = () => {
       alert('Please select or set a location first.');
       return;
     }
+    if (!itemForm.type) {
+      toast.error('Please select an item type.');
+      return;
+    }
 
     // Default quantity to 0 if null, undefined, or empty
     const sanitizedQty =
@@ -227,7 +284,12 @@ const Store: React.FC = () => {
         : 0;
 
     const payload = {
-      ...itemForm,
+      type: itemForm.type,
+      mcode: itemForm.mcode,
+      description: itemForm.description,
+      gst: itemForm.gst,
+      unit: itemForm.unit,
+      rate: itemForm.rate,
       qty: sanitizedQty,
       location: selectedLocationId,
     };
@@ -259,22 +321,36 @@ const Store: React.FC = () => {
     }
   };
 
-  const handleUpdateReceivedQty = async (itemId: string, currentReceivedQty: number) => {
+  const handleUpdateReceivedQty = async (
+    itemId: string,
+    currentReceivedQty: number,
+    orderedQty: number,
+  ) => {
     const inputValue = receivedQtyInputs[itemId] ?? String(currentReceivedQty);
     const qtyToUpdate = Number(inputValue);
     if (inputValue.trim() === '' || !Number.isFinite(qtyToUpdate) || qtyToUpdate < 0) {
       toast.error('Enter a valid received quantity.');
       return;
     }
+    if (qtyToUpdate > orderedQty) {
+      toast.error('Received quantity cannot exceed the quantity ordered.');
+      return;
+    }
 
     setSavingReceiptItemId(itemId);
     try {
-      await axios.put(`${import.meta.env.VITE_APP_API}/api/items/receivedqty/${itemId}`, {
-        receivedqtyNew: qtyToUpdate,
-      });
+      const response = await axios.put<Item>(
+        `${import.meta.env.VITE_APP_API}/api/items/receivedqty/${itemId}`,
+        {
+          receivedqtyNew: qtyToUpdate,
+        },
+      );
+      const updatedItem = response.data;
+      const updatedReceivedQty = Number(updatedItem.receivedqtyNew ?? qtyToUpdate);
+
       setItems((currentItems) =>
         currentItems.map((item) =>
-          item._id === itemId ? { ...item, receivedqtyNew: qtyToUpdate } : item,
+          item._id === itemId ? { ...item, ...updatedItem } : item,
         ),
       );
       setActivePurchaseOrders((currentPurchases) =>
@@ -282,12 +358,15 @@ const Store: React.FC = () => {
           ...purchase,
           items: purchase.items?.map((purchaseItem) =>
             getEntityId(purchaseItem) === itemId && typeof purchaseItem === 'object'
-              ? { ...purchaseItem, receivedqtyNew: qtyToUpdate }
+              ? { ...purchaseItem, ...updatedItem }
               : purchaseItem,
           ),
         })),
       );
-      setReceivedQtyInputs((currentInputs) => ({ ...currentInputs, [itemId]: String(qtyToUpdate) }));
+      setReceivedQtyInputs((currentInputs) => ({
+        ...currentInputs,
+        [itemId]: String(updatedReceivedQty),
+      }));
       toast.success('Received quantity updated.');
     } catch (error: any) {
       console.error('Error updating received quantity:', error);
@@ -304,11 +383,11 @@ const Store: React.FC = () => {
       const catalogueItem = items.find((item) => item._id === itemId);
       const purchaseItemDetails =
         purchaseItem && typeof purchaseItem === 'object' ? purchaseItem : undefined;
-      if (!itemId || (!catalogueItem && !purchaseItemDetails)) return [];
+      if (!itemId || !catalogueItem || catalogueItem.type !== 'SECONDARY') return [];
 
       const item = {
-        ...(catalogueItem || {}),
         ...(purchaseItemDetails || {}),
+        ...catalogueItem,
         _id: itemId,
       } as Item;
       const purchaseOrderId = getEntityId(purchaseOrder) || `purchase-${purchaseIndex}`;
@@ -321,11 +400,14 @@ const Store: React.FC = () => {
     });
   });
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.mcode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const normalizedSearchTerm = searchTerm.toLowerCase();
+  const filteredItems = items.filter((item) => {
+    if (item.type !== 'SECONDARY') return false;
+    return (
+      item.mcode?.toLowerCase().includes(normalizedSearchTerm) ||
+      item.description?.toLowerCase().includes(normalizedSearchTerm)
+    );
+  });
 
   return (
     <div className={styles.storeContainer}>
@@ -340,6 +422,7 @@ const Store: React.FC = () => {
                 id="locationSelect"
                 value={selectedLocationId}
                 onChange={handleLocationChange}
+                className={styles.locationSelect}
               >
                 <option value="" disabled>
                   Select a Location
@@ -402,6 +485,7 @@ const Store: React.FC = () => {
                     const itemId = item._id!;
                     const orderedQty = Number(item.newQty || 0);
                     const receivedQty = Number(item.receivedqtyNew || 0);
+                    const remainingQty = Math.max(0, orderedQty - receivedQty);
                     const inputValue = receivedQtyInputs[itemId] ?? String(receivedQty);
 
                     return (
@@ -416,6 +500,7 @@ const Store: React.FC = () => {
                             className={styles.receivedQtyInput}
                             type="number"
                             min="0"
+                            max={orderedQty}
                             step="any"
                             aria-label={`Received quantity for ${item.description || item.mcode}`}
                             value={inputValue}
@@ -427,12 +512,14 @@ const Store: React.FC = () => {
                             }
                           />
                         </td>
-                        <td className={styles.receiptQty}>{orderedQty - receivedQty}</td>
+                        <td className={styles.receiptQty}>{remainingQty}</td>
                         <td>
                           <button
                             type="button"
                             className={styles.saveReceiptBtn}
-                            onClick={() => handleUpdateReceivedQty(itemId, receivedQty)}
+                            onClick={() =>
+                              handleUpdateReceivedQty(itemId, receivedQty, orderedQty)
+                            }
                             disabled={savingReceiptItemId === itemId}
                             title="Update received quantity"
                           >
@@ -464,6 +551,7 @@ const Store: React.FC = () => {
               <tr>
                 <th className={styles.colSl}>Sl No</th>
                 <th className={styles.colMcode}>Material Code</th>
+                <th>Type</th>
                 <th>Description</th>
                 <th className={styles.colGst}>GST (%)</th>
                 <th className={styles.colUnit}>Unit</th>
@@ -478,6 +566,7 @@ const Store: React.FC = () => {
                   <tr key={item._id}>
                     <td className={styles.slNo}>{index + 1}</td>
                     <td className={styles.mcode}>{item.mcode}</td>
+                    <td>{item.type || '-'}</td>
                     <td className={styles.desc}>{item.description}</td>
                     <td className={styles.gst}>{item.gst}%</td>
                     <td className={styles.unit}>{item.unit}</td>
@@ -488,7 +577,7 @@ const Store: React.FC = () => {
                       })}
                     </td>
                     <td className={styles.qty}>
-                      {Number(item.qty || 0) + Number(item.receivedqtyNew || 0)}
+                      {Number(item.qty || 0)}
                     </td>
                     <td className={styles.actionsCell}>
                       <div className={styles.actionBtns}>
@@ -512,7 +601,7 @@ const Store: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className={styles.emptyCell}>
+                  <td colSpan={9} className={styles.emptyCell}>
                     No items found for this location.
                   </td>
                 </tr>
@@ -533,6 +622,21 @@ const Store: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveItem} className={styles.modalForm}>
+              <div className={styles.formGroup}>
+                <label>Item Type *</label>
+                <select
+                  required
+                  value={itemForm.type}
+                  onChange={(e) =>
+                    setItemForm({ ...itemForm, type: e.target.value as ItemType | '' })
+                  }
+                >
+                  <option value="">Select item type</option>
+                  <option value="PRIMARY">Primary</option>
+                  <option value="SECONDARY">Secondary</option>
+                </select>
+              </div>
+
               <div className={styles.formGroup}>
                 <label>Material Code *</label>
                 <input

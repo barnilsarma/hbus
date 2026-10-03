@@ -5,9 +5,11 @@ import { toast } from 'sonner';
 import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
 
-// 1. Updated Type: Allow string | number for form handling ease
+type ItemType = 'PRIMARY' | 'SECONDARY';
+
 type Item = {
   _id?: string;
+  type?: ItemType;
   mcode?: string;
   description: string;
   gst: number | string;
@@ -15,11 +17,17 @@ type Item = {
   rate: number | string;
   qty: number | string;
   newQty?: number | string;
+  receivedqtyOriginal?: number | string;
   receivedqtyNew?: number | string;
-  location?: string; // Optional location field for new items
+  location?: string;
 };
 
-const initialItemState: Item = {
+type ItemForm = Omit<Item, 'type'> & {
+  type: ItemType | '';
+};
+
+const initialItemState: ItemForm = {
+  type: '',
   mcode: '',
   description: '',
   gst: 18,
@@ -27,8 +35,11 @@ const initialItemState: Item = {
   rate: 0,
   qty: 0,
   newQty: 0,
+  receivedqtyOriginal: 0,
   receivedqtyNew: 0,
 };
+
+const getOrderedQty = (item: Item): number => Math.max(0, Number(item.newQty || 0));
 
 const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '', minLength = 0 }) => {
   const chars = text.split('');
@@ -115,7 +126,7 @@ export default function POFormat() {
 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemForm, setItemForm] = useState<Item>(initialItemState);
+  const [itemForm, setItemForm] = useState<ItemForm>(initialItemState);
 
   const [searchMcode, setSearchMcode] = useState<string>('');
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
@@ -148,6 +159,7 @@ export default function POFormat() {
     setEditingItemId(item._id || null);
     setItemForm({
       _id: item._id,
+      type: item.type || '',
       mcode: item.mcode,
       description: item.description,
       gst: item.gst,
@@ -155,6 +167,7 @@ export default function POFormat() {
       rate: item.rate,
       qty: item.qty,
       newQty: item.newQty ?? 0, // 2. FIXED: Populate newQty during edit!
+      receivedqtyOriginal: item.receivedqtyOriginal ?? 0,
       receivedqtyNew: item.receivedqtyNew ?? 0,
     });
     setSearchStatus('idle');
@@ -171,7 +184,7 @@ export default function POFormat() {
     try {
       const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`);
       if (response.data) {
-        setItemForm({ ...response.data});
+        setItemForm({ ...response.data, type: response.data.type || '' });
         setSearchStatus('found');
         toast.success('Item found!');
       } else {
@@ -191,24 +204,26 @@ export default function POFormat() {
 
   const handleSaveItem = async (e: React.FormEvent) => {
   e.preventDefault();
+  if (!itemForm.type) {
+    toast.error('Please select an item type.');
+    return;
+  }
   try {
-    // 1. Destructure both _id and location out of itemForm so existing/populated location objects are removed
-    const { _id: _, ...restPayload } = itemForm;
-
     const locationId = localStorage.getItem('hbus_selected_location_id');
 
     if (!locationId) {
       toast.error('Selected location not found in local storage. Please select a location first.');
       return;
     }
-    
-    // 2. Explicitly assign locationId from localStorage
+
     const payload = {
-      ...restPayload,
-      qty: Number(restPayload.qty),
-      rate: Number(restPayload.rate),
-      gst: Number(restPayload.gst),
-      newQty: Number(restPayload.newQty),
+      type: itemForm.type,
+      mcode: itemForm.mcode,
+      description: itemForm.description,
+      gst: Number(itemForm.gst ?? 0),
+      unit: itemForm.unit,
+      rate: Number(itemForm.rate ?? 0),
+      newQty: Number(itemForm.newQty ?? 0),
       location: locationId,
     };
     if (editingItemId || searchStatus === 'found') {
@@ -229,7 +244,12 @@ export default function POFormat() {
 
       toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
     } else {
-      const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, payload);
+      const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, {
+        ...payload,
+        qty: 0,
+        receivedqtyOriginal: 0,
+        receivedqtyNew: 0,
+      });
       const newItemId = itemRes.data._id;
 
       const currentItemIds = (poData?.items || []).map((it: any) =>
@@ -285,7 +305,7 @@ export default function POFormat() {
 
   const itemsList: Item[] = poData?.items || [];
   const totalWithoutTax = itemsList.reduce(
-    (sum, item) => sum + Number(item.rate || 0) * (Number(item.newQty || 0) - Number(item.receivedqtyNew || 0)),
+    (sum, item) => sum + Number(item.rate || 0) * getOrderedQty(item),
     0,
   );
 
@@ -298,7 +318,7 @@ export default function POFormat() {
   let totalIGST = 0;
 
   itemsList.forEach((item) => {
-    const itemTotal = Number(item.rate || 0) * Number(item.newQty || 0);
+    const itemTotal = Number(item.rate || 0) * getOrderedQty(item);
     const taxAmount = itemTotal * (Number(item.gst || 0) / 100);
     if (isIntraState) {
       totalCGST += taxAmount / 2;
@@ -416,7 +436,8 @@ export default function POFormat() {
           <tbody>
             {itemsList.length > 0 ? (
               itemsList.map((item: Item, index: number) => {
-                const totalAmount = Number(item.rate || 0) * (Number(item.newQty || 0) - Number(item.receivedqtyNew || 0));
+                const orderedQty = getOrderedQty(item);
+                const totalAmount = Number(item.rate || 0) * orderedQty;
                 return (
                   <tr key={item._id || index}>
                     <td className={styles.textCenter}>{index + 1}</td>
@@ -429,7 +450,7 @@ export default function POFormat() {
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className={styles.textCenter}>{Number(item.newQty || 0) - Number(item.receivedqtyNew || 0)}</td>
+                    <td className={styles.textCenter}>{orderedQty}</td>
 
                     <td className={styles.textRight}>
                       {totalAmount.toLocaleString('en-IN', {
@@ -660,6 +681,24 @@ export default function POFormat() {
 
               {(editingItemId || searchStatus === 'found' || searchStatus === 'not-found') && (
                 <form onSubmit={handleSaveItem} className={styles.modalForm}>
+                  <div className={styles.formGroup}>
+                    <label>Item Type *</label>
+                    <select
+                      required
+                      value={itemForm.type}
+                      onChange={(e) =>
+                        setItemForm({
+                          ...itemForm,
+                          type: e.target.value as ItemType | '',
+                        })
+                      }
+                    >
+                      <option value="">Select item type</option>
+                      <option value="PRIMARY">Primary</option>
+                      <option value="SECONDARY">Secondary</option>
+                    </select>
+                  </div>
+
                   {searchStatus === 'found' && !editingItemId && (
                     <div className={styles.foundItemDetails} style={{ padding: '10px', background: '#f5f5f5', borderRadius: '5px', marginBottom: '15px' }}>
                       <p><strong>Material Code:</strong> {itemForm.mcode}</p>
