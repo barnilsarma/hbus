@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
 
-type ItemType = 'PRIMARY' | 'SECONDARY';
+const ITEM_TYPE = 'SECONDARY' as const;
+type ItemType = typeof ITEM_TYPE;
 
 type Item = {
   _id?: string;
@@ -27,7 +28,7 @@ type ItemForm = Omit<Item, 'type'> & {
 };
 
 const initialItemState: ItemForm = {
-  type: '',
+  type: ITEM_TYPE,
   mcode: '',
   description: '',
   gst: 18,
@@ -159,14 +160,14 @@ export default function POFormat() {
     setEditingItemId(item._id || null);
     setItemForm({
       _id: item._id,
-      type: item.type || '',
+      type: ITEM_TYPE,
       mcode: item.mcode,
       description: item.description,
       gst: item.gst,
       unit: item.unit,
       rate: item.rate,
       qty: item.qty,
-      newQty: item.newQty ?? 0, // 2. FIXED: Populate newQty during edit!
+      newQty: item.newQty ?? 0,
       receivedqtyOriginal: item.receivedqtyOriginal ?? 0,
       receivedqtyNew: item.receivedqtyNew ?? 0,
     });
@@ -182,9 +183,11 @@ export default function POFormat() {
 
     setSearchStatus('loading');
     try {
-      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`);
+      const response = await axios.get(
+        `${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`,
+      );
       if (response.data) {
-        setItemForm({ ...response.data, type: response.data.type || '' });
+        setItemForm({ ...response.data, type: ITEM_TYPE });
         setSearchStatus('found');
         toast.success('Item found!');
       } else {
@@ -203,73 +206,72 @@ export default function POFormat() {
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!itemForm.type) {
-    toast.error('Please select an item type.');
-    return;
-  }
-  try {
-    const locationId = localStorage.getItem('hbus_selected_location_id');
+    e.preventDefault();
 
-    if (!locationId) {
-      toast.error('Selected location not found in local storage. Please select a location first.');
-      return;
-    }
-
-    const payload = {
-      type: itemForm.type,
-      mcode: itemForm.mcode,
-      description: itemForm.description,
-      gst: Number(itemForm.gst ?? 0),
-      unit: itemForm.unit,
-      rate: Number(itemForm.rate ?? 0),
-      newQty: Number(itemForm.newQty ?? 0),
-      location: locationId,
-    };
-    if (editingItemId || searchStatus === 'found') {
-      const targetId = editingItemId || itemForm._id;
-      await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
-
-      if (searchStatus === 'found') {
-        const currentItemIds = (poData?.items || []).map((it: any) =>
-          typeof it === 'string' ? it : it._id,
-        );
-        if (!currentItemIds.includes(targetId)) {
-          const updatedItemIds = [...currentItemIds, targetId];
-          await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-            items: updatedItemIds,
-          });
-        }
+    try {
+      const locationId = localStorage.getItem('hbus_selected_location_id');
+      if (!locationId) {
+        toast.error('Selected location not found in local storage. Please select a location first.');
+        return;
       }
 
-      toast.success(editingItemId ? 'Item updated successfully.' : 'Item linked to PO successfully.');
-    } else {
-      const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, {
-        ...payload,
-        qty: 0,
-        receivedqtyOriginal: 0,
-        receivedqtyNew: 0,
-      });
-      const newItemId = itemRes.data._id;
+      const currentItemIds = (poData?.items || [])
+        .map((item: string | { _id?: string }) =>
+          typeof item === 'string' ? item : item._id,
+        )
+        .filter((itemId: string | undefined): itemId is string => Boolean(itemId));
+      const linkItemToPO = async (itemId: string) => {
+        if (!currentItemIds.includes(itemId)) {
+          await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
+            items: [...currentItemIds, itemId],
+          });
+        }
+      };
+      const payload = {
+        type: ITEM_TYPE,
+        mcode: itemForm.mcode,
+        description: itemForm.description,
+        gst: Number(itemForm.gst ?? 0),
+        unit: itemForm.unit,
+        rate: Number(itemForm.rate ?? 0),
+        newQty: Number(itemForm.newQty ?? 0),
+        location: locationId,
+      };
+      if (editingItemId) {
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${editingItemId}`, payload);
+        toast.success('Item updated successfully.');
+      } else if (searchStatus === 'found') {
+        const targetId = itemForm._id;
+        if (!targetId) {
+          throw new Error('The selected item does not have an ID.');
+        }
 
-      const currentItemIds = (poData?.items || []).map((it: any) =>
-        typeof it === 'string' ? it : it._id,
-      );
-      const updatedItemIds = [...currentItemIds, newItemId];
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
+        await linkItemToPO(targetId);
+        toast.success('Item linked to PO successfully.');
+      } else {
+        const itemResponse = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, {
+          ...payload,
+          qty: 0,
+          receivedqtyOriginal: 0,
+          receivedqtyNew: 0,
+        });
+        const newItemId = itemResponse.data._id;
 
-      await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-        items: updatedItemIds,
-      });
-      toast.success('New item created and added to PO.');
+        if (!newItemId) {
+          throw new Error('The created item does not have an ID.');
+        }
+        await linkItemToPO(newItemId);
+        toast.success('New item created and added to PO.');
+      }
+
+      await fetchPOData();
+      setIsModalOpen(false);
+    } catch (error: any) {
+      console.error('Error saving item:', error);
+      toast.error(error.response?.data?.message || 'Failed to save item.');
     }
-
-    await fetchPOData();
-    setIsModalOpen(false);
-  } catch (error: any) {
-    console.error('Error saving item:', error);
-    toast.error(error.response?.data?.message || 'Failed to save item.');
-  }
-};
+  };
   const handleDeleteItem = async (itemId: string) => {
     if (!window.confirm('Are you sure you want to remove this item from the Purchase Order?')) return;
 
@@ -671,7 +673,12 @@ export default function POFormat() {
                       placeholder="Enter MCode"
                     />
                   </div>
-                  <button type="button" onClick={handleSearchItem} className={styles.primaryBtn} style={{ marginTop: '24px' }}>
+                  <button
+                    type="button"
+                    onClick={handleSearchItem}
+                    className={styles.primaryBtn}
+                    style={{ marginTop: '24px' }}
+                  >
                     <FaSearch /> Search
                   </button>
                 </div>
@@ -681,24 +688,6 @@ export default function POFormat() {
 
               {(editingItemId || searchStatus === 'found' || searchStatus === 'not-found') && (
                 <form onSubmit={handleSaveItem} className={styles.modalForm}>
-                  <div className={styles.formGroup}>
-                    <label>Item Type *</label>
-                    <select
-                      required
-                      value={itemForm.type}
-                      onChange={(e) =>
-                        setItemForm({
-                          ...itemForm,
-                          type: e.target.value as ItemType | '',
-                        })
-                      }
-                    >
-                      <option value="">Select item type</option>
-                      <option value="PRIMARY">Primary</option>
-                      <option value="SECONDARY">Secondary</option>
-                    </select>
-                  </div>
-
                   {searchStatus === 'found' && !editingItemId && (
                     <div className={styles.foundItemDetails} style={{ padding: '10px', background: '#f5f5f5', borderRadius: '5px', marginBottom: '15px' }}>
                       <p><strong>Material Code:</strong> {itemForm.mcode}</p>
@@ -736,7 +725,6 @@ export default function POFormat() {
                       <div className={styles.formRow}>
                         <div className={styles.formGroup}>
                           <label>GST (%) *</label>
-                          {/* 4. Removed strict Number() coercing in onChange */}
                           <input
                             type="number"
                             required

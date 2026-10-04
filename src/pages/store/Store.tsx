@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { FaPlus, FaPencilAlt, FaTrash, FaTimes, FaCheck } from 'react-icons/fa';
 import styles from './Store.module.scss';
 
@@ -88,6 +89,7 @@ const initialItemState: ItemForm = {
 };
 
 const Store: React.FC = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [activePurchaseOrders, setActivePurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [receivedQtyInputs, setReceivedQtyInputs] = useState<Record<string, string>>({});
@@ -443,6 +445,10 @@ const Store: React.FC = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+
+          <button className={styles.addBtn} onClick={() => navigate('/stock')}>
+            Stock
+          </button>
 
           <button
             className={styles.addBtn}
