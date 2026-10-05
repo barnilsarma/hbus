@@ -145,6 +145,9 @@ const Home = () => {
                             {((userRole === 'A' || userRole === 'B') || (viewaccess.findIndex((item) => item === 'Purchase') !== -1 || editaccess.findIndex((item) => item === 'Purchase') !== -1)) && (
                                 <button onClick={() => navigate('/purchase')}>PURCHASE ORDER</button>
                             )}
+                            {((userRole === 'A' || userRole === 'B') || (viewaccess.findIndex((item) => item === 'Purchase') !== -1 || editaccess.findIndex((item) => item === 'Purchase') !== -1)) && (
+                                <button onClick={() => navigate('/purchase-primary')}>RAW MATERIAL PURCHASE ORDER</button>
+                            )}
                             {(userRole === 'A' || userRole === 'B') && (
                                 <button onClick={() => navigate('/location')}>LOCATIONS</button>
                             )}

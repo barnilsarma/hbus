@@ -9,6 +9,7 @@ type LocationRef = string | { _id?: string; id?: string; name?: string; address?
 
 type RawMaterial = {
   _id?: string;
+  id?: string;
   mcode: string;
   name: string;
   ordered: number | string;
@@ -18,6 +19,7 @@ type RawMaterial = {
 
 type PurchaseOrder = {
   _id?: string;
+  id?: string;
   PONumber?: string;
   date?: string;
   invoicedate?: string;
@@ -27,7 +29,7 @@ type PurchaseOrder = {
   supplierStateCode?: string | number;
   gstn?: string;
   location?: LocationRef;
-  items?: Array<RawMaterial | string>;
+  rawMaterials?: Array<RawMaterial | string>;
 };
 
 type RawMaterialForm = {
@@ -57,7 +59,7 @@ const getResponseData = <T,>(data: unknown): T => {
 
 const getEntityId = (value: RawMaterial | string): string | null => {
   if (typeof value === 'string') return value;
-  return value._id || null;
+  return value._id || value.id || null;
 };
 
 const getLocationId = (value: LocationRef | undefined): string | null => {
@@ -101,9 +103,9 @@ export default function PurchasePrimary() {
   const fetchPurchase = useCallback(async () => {
     if (!id) return null;
     try {
-      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`);
+      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/raw-material-pos/${id}`);
       const purchaseData = getResponseData<PurchaseOrder>(response.data);
-      const rawItems = Array.isArray(purchaseData.items) ? purchaseData.items : [];
+      const rawItems = Array.isArray(purchaseData.rawMaterials) ? purchaseData.rawMaterials : [];
       const loadedMaterials = await Promise.all(
         rawItems.map(async (item) => {
           if (typeof item !== 'string' && item.name !== undefined && item.mcode !== undefined) {
@@ -219,7 +221,7 @@ export default function PurchasePrimary() {
     }
 
     try {
-      const currentIds = (purchase?.items || [])
+      const currentIds = (purchase?.rawMaterials || [])
         .map(getEntityId)
         .filter((itemId): itemId is string => Boolean(itemId));
       let materialId = editingId;
@@ -237,8 +239,8 @@ export default function PurchasePrimary() {
 
       if (!materialId) throw new Error('The saved RawMaterial does not have an ID.');
       if (!currentIds.includes(materialId)) {
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-          items: [...currentIds, materialId],
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/raw-material-pos/${id}`, {
+          rawMaterials: [...currentIds, materialId],
         });
       }
       toast.success(editingId ? 'RawMaterial updated.' : 'RawMaterial added to the PO.');
@@ -261,12 +263,9 @@ export default function PurchasePrimary() {
   const removeMaterial = async (materialId: string) => {
     if (!window.confirm('Remove this RawMaterial from the purchase order?')) return;
     try {
-      const remainingIds = (purchase?.items || [])
-        .map(getEntityId)
-        .filter((itemId): itemId is string => Boolean(itemId) && itemId !== materialId);
-      await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-        items: remainingIds,
-      });
+      await axios.delete(
+        `${import.meta.env.VITE_APP_API}/api/raw-material-pos/${id}/raw-materials/${materialId}`,
+      );
       toast.success('RawMaterial removed from the purchase order.');
       const result = await fetchPurchase();
       if (result) {
@@ -297,8 +296,8 @@ export default function PurchasePrimary() {
   return (
     <div className={styles.pageWrapper}>
       <div className={`${styles.actionBar} ${styles.noPrint}`}>
-        <button className={styles.secondaryBtn} onClick={() => navigate('/purchase')}>
-          <FaArrowLeft /> Back to Purchases
+        <button className={styles.secondaryBtn} onClick={() => navigate('/purchase-primary')}>
+        <FaArrowLeft /> Back to Raw Material Purchases
         </button>
         <div className={styles.rightActions}>
           <button className={styles.primaryBtn} onClick={openAddModal}>

@@ -47,7 +47,20 @@ const normalizeFieldValue = (field: string, value: string) => {
   return value;
 };
 
-export default function PurchaseNew() {
+const getCreatedPurchaseId = (data: unknown): string | null => {
+  let result = data;
+  while (result && typeof result === 'object' && !Array.isArray(result)) {
+    const envelope = result as Record<string, unknown>;
+    const id = envelope._id ?? envelope.id;
+    if (typeof id === 'string') return id;
+    const nested = envelope.data ?? envelope.purchase;
+    if (nested === undefined || nested === result) break;
+    result = nested;
+  }
+  return null;
+};
+
+export default function PurchaseNew({ primary = false }: { primary?: boolean }) {
   const navigate = useNavigate();
   const [createData, setCreateData] = useState<Record<string, string>>(
     Object.fromEntries(visibleFields.map((f) => [f, ''])) as Record<string, string>,
@@ -69,20 +82,31 @@ export default function PurchaseNew() {
   const payload = {
     ...Object.fromEntries(
       Object.entries(createData)
+        .filter(([key]) => !primary || key !== 'receivedqty')
         .map(([k, v]) => [k, normalizeFieldValue(k, v)])
         .filter(([, v]) => v !== undefined),
     ),
     locationId,
     location: locationId,
-    items: [], // Explicitly send empty items array on creation
+    ...(primary ? { rawMaterials: [] } : { items: [] }),
   };
 
   try {
-    const res = await axios.post(`${import.meta.env.VITE_APP_API}/api/purchases`, payload);
+    const endpoint = primary ? '/api/raw-material-pos' : '/api/purchases';
+    const res = await axios.post(`${import.meta.env.VITE_APP_API}${endpoint}`, payload);
     toast.success('Purchase order created successfully.');
-    
-    // Redirect to the item management page for this specific PO
-    if(res) navigate(`/purchase`);
+    if (primary) {
+      const purchaseId = getCreatedPurchaseId(res.data);
+      if (!purchaseId) {
+        const message = 'Purchase order was created, but the response did not include its ID.';
+        setError(message);
+        toast.error(message);
+        return;
+      }
+      navigate(`/purchase-primary/${purchaseId}`);
+    } else {
+      navigate('/purchase');
+    }
   } catch (err: any) {
     const serverMsg = err.response?.data?.message || 'Failed to create purchase.';
     setError(serverMsg);
@@ -94,11 +118,15 @@ export default function PurchaseNew() {
       <section className={styles.card}>
         <div className={styles.header}>
           <div>
-            <h1>Create Purchase Order</h1>
+            <h1>{primary ? 'Create Raw Material Purchase Order' : 'Create Purchase Order'}</h1>
             <p>Fill in the required information to generate a new purchase record.</p>
           </div>
           <div className={styles.actions}>
-            <button type="button" className={styles.backButton} onClick={() => navigate('/purchase')}>
+            <button
+              type="button"
+              className={styles.backButton}
+              onClick={() => navigate(primary ? '/purchase-primary' : '/purchase')}
+            >
               <FaArrowLeft size={14} style={{ marginRight: '6px' }} />
               Back
             </button>
@@ -108,52 +136,59 @@ export default function PurchaseNew() {
         {error && <div className={styles.error}>{error}</div>}
 
         <form onSubmit={handleSubmit} className={styles.formGrid}>
-          {fieldDefinitions.map((field) => (
-            <div key={field.name} className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>
-                <span>{field.label}</span>
-                {field.required && <span className={styles.requiredMark}>*</span>}
-              </label>
+          {fieldDefinitions.map((field) => {
+            if (primary && field.name === 'receivedqty') return null;
+            return (
+                <div key={field.name} className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel}>
+                    <span>{field.label}</span>
+                    {field.required && <span className={styles.requiredMark}>*</span>}
+                  </label>
 
-              {field.name === 'status' ? (
-                <div className={styles.inputWrapper}>
-                  <select
-                    value={createData[field.name] ?? ''}
-                    onChange={(e) => setCreateData((p) => ({ ...p, [field.name]: e.target.value }))}
-                    required={field.required}
-                    className={styles.selectInput}
-                  >
-                    <option value="">Select status</option>
-                    {statusOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  {field.name === 'status' ? (
+                    <div className={styles.inputWrapper}>
+                      <select
+                        value={createData[field.name] ?? ''}
+                        onChange={(e) => setCreateData((p) => ({ ...p, [field.name]: e.target.value }))}
+                        required={field.required}
+                        className={styles.selectInput}
+                      >
+                        <option value="">Select status</option>
+                        {statusOptions.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className={styles.inputWrapper}>
+                      <input
+                        type={field.type}
+                        value={createData[field.name] ?? ''}
+                        onChange={(e) => setCreateData((p) => ({ ...p, [field.name]: e.target.value }))}
+                        required={field.required}
+                        placeholder={field.type === 'text' || field.type === 'number' ? `Enter ${field.label.toLowerCase()}` : undefined}
+                        className={styles.textInput}
+                      />
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className={styles.inputWrapper}>
-                  <input
-                    type={field.type}
-                    value={createData[field.name] ?? ''}
-                    onChange={(e) => setCreateData((p) => ({ ...p, [field.name]: e.target.value }))}
-                    required={field.required}
-                    placeholder={field.type === 'text' || field.type === 'number' ? `Enter ${field.label.toLowerCase()}` : undefined}
-                    className={styles.textInput}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           <div className={styles.formActions}>
-            <button type="button" className={styles.secondaryButton} onClick={() => navigate('/purchase')}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() => navigate(primary ? '/purchase-primary' : '/purchase')}
+            >
               <FaTimes size={14} style={{ marginRight: '6px' }} />
               Cancel
             </button>
             <button type="submit" className={styles.primaryButton}>
               <FaPlus size={14} style={{ marginRight: '6px' }} />
-              Create Purchase
+              {primary ? 'Create Raw Material PO' : 'Create Purchase'}
             </button>
           </div>
         </form>

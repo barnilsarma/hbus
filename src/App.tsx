@@ -13,6 +13,8 @@ function App() {
           <Route path="/users" element={<pages.Users />} />
           <Route path="/purchase" element={<pages.Purchase />} />
           <Route path="/purchase/new" element={<pages.PurchaseNew />} />
+          <Route path="/purchase-primary" element={<pages.Purchase primary />} />
+          <Route path="/purchase-primary/new" element={<pages.PurchaseNew primary />} />
           <Route path="/location" element={<pages.Location />} />
           <Route path="/store" element={<pages.Store />} />
           <Route path="/stock" element={<pages.Stock />} />

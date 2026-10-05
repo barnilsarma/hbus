@@ -145,7 +145,7 @@ const normalizeFieldValue = (field: string, value: string) => {
   return value;
 };
 
-const Purchase = () => {
+const Purchase = ({ primary = false }: { primary?: boolean }) => {
   const navigate = useNavigate();
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -227,7 +227,8 @@ const Purchase = () => {
     }
   }, [isAdmin]);
 
-  const columns = visibleFields;
+  const columns = primary ? visibleFields.filter((field) => field !== 'receivedqty') : visibleFields;
+  const purchasesEndpoint = primary ? '/api/raw-material-pos' : '/api/purchases';
 
   const loadLocations = async () => {
     try {
@@ -245,7 +246,7 @@ const Purchase = () => {
     try {
       await toast.promise(
         (async () => {
-          const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases`);
+          const response = await axios.get(`${import.meta.env.VITE_APP_API}${purchasesEndpoint}`);
           const data: PurchaseItem[] = Array.isArray(response.data) ? response.data : [];
           setPurchases(data);
           setError(null);
@@ -392,7 +393,7 @@ const Purchase = () => {
 
     try {
       await toast.promise(
-        axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${itemId}`, {
+        axios.put(`${import.meta.env.VITE_APP_API}${purchasesEndpoint}/${itemId}`, {
           [editField]: payloadValue,
         }),
         {
@@ -706,8 +707,11 @@ const Purchase = () => {
                   </td>
                 ))}
                 <td>
-                  <Link to={`/PO/${getEntityId(item)}`} className="text-[#110055] bg-[#ffffff]">
-                    GENERATE PO
+                  <Link
+                    to={primary ? `/purchase-primary/${getEntityId(item)}` : `/PO/${getEntityId(item)}`}
+                    className="text-[#110055] bg-[#ffffff]"
+                  >
+                    {primary ? 'MANAGE RAW MATERIALS' : 'GENERATE PO'}
                   </Link>
                 </td>
               </tr>
@@ -723,8 +727,8 @@ const Purchase = () => {
       <section className={styles.card}>
         <div className={styles.header}>
           <div>
-            <h1>Purchase Orders</h1>
-            <p>Review and manage purchase entries.</p>
+            <h1>{primary ? 'Raw Material Purchase Orders' : 'Purchase Orders'}</h1>
+            <p>{primary ? 'Review and manage raw material purchase orders.' : 'Review and manage purchase entries.'}</p>
           </div>
           <div className={styles.actions}>
             {isTypeA && (
@@ -775,7 +779,11 @@ const Purchase = () => {
                 Manage Access
               </button>
             )}
-            <button type="button" className={styles.createButton} onClick={() => navigate('/purchase/new')}>
+            <button
+              type="button"
+              className={styles.createButton}
+              onClick={() => navigate(primary ? '/purchase-primary/new' : '/purchase/new')}
+            >
               Create
             </button>
             <button type="button" className={styles.backButton} onClick={() => navigate('/')}>
