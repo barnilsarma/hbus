@@ -15,6 +15,8 @@ type RawMaterial = {
   ordered: number | string;
   stock: number | string;
   location: LocationRef;
+  gst: number | string;
+  rate: number | string;
 };
 
 type PurchaseOrder = {
@@ -37,6 +39,8 @@ type RawMaterialForm = {
   name: string;
   ordered: number | string;
   stock: number | string;
+  gst: number | string;
+  rate: number | string;
 };
 
 const initialForm: RawMaterialForm = {
@@ -44,6 +48,8 @@ const initialForm: RawMaterialForm = {
   name: '',
   ordered: 0,
   stock: 0,
+  gst: 0,
+  rate: 0,
 };
 
 const getResponseData = <T,>(data: unknown): T => {
@@ -68,8 +74,22 @@ const getLocationId = (value: LocationRef | undefined): string | null => {
 };
 
 const getLocationName = (value: LocationRef | undefined): string => {
-  if (typeof value === 'string') return value || '-';
-  return value?.name || value?.address || value?._id || value?.id || '-';
+  if (typeof value === 'string') return '-';
+  return value?.name || value?.address || '-';
+};
+
+const getMaterialLocationName = (
+  materialLocation: LocationRef,
+  purchaseLocation: LocationRef | undefined,
+  purchaseLocationName: string,
+): string => {
+  const materialLocationName = getLocationName(materialLocation);
+  if (materialLocationName !== '-') return materialLocationName;
+
+  const materialLocationId = getLocationId(materialLocation);
+  return materialLocationId && materialLocationId === getLocationId(purchaseLocation)
+    ? purchaseLocationName
+    : '-';
 };
 
 const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '', minLength = 0 }) => {
@@ -158,6 +178,8 @@ export default function PurchasePrimary() {
       name: material.name,
       ordered: material.ordered,
       stock: material.stock,
+      gst: material.gst ?? 0,
+      rate: material.rate ?? 0,
     });
     setSearchStatus('idle');
     setModalOpen(true);
@@ -180,6 +202,8 @@ export default function PurchasePrimary() {
         name: material.name,
         ordered: material.ordered ?? 0,
         stock: material.stock ?? 0,
+        gst: material.gst ?? 0,
+        rate: material.rate ?? 0,
       });
       setFoundMaterialId(material._id);
       setSearchStatus('found');
@@ -212,10 +236,14 @@ export default function PurchasePrimary() {
       name: form.name.trim(),
       ordered: Number(form.ordered),
       stock: Number(form.stock),
+      gst: Number(form.gst),
+      rate: Number(form.rate),
       location: locationId,
     };
     if (!payload.mcode || !payload.name || !Number.isFinite(payload.ordered) ||
-      !Number.isFinite(payload.stock) || payload.ordered < 0 || payload.stock < 0) {
+      !Number.isFinite(payload.stock) || !Number.isFinite(payload.gst) ||
+      !Number.isFinite(payload.rate) || payload.ordered < 0 || payload.stock < 0 ||
+      payload.gst < 0 || payload.rate < 0) {
       toast.error('Enter valid RawMaterial details.');
       return;
     }
@@ -366,11 +394,13 @@ export default function PurchasePrimary() {
           <thead>
             <tr>
               <th style={{ width: '6%' }}>Sl No</th>
-              <th style={{ width: '17%' }}>Material Code</th>
-              <th style={{ width: '30%' }}>Material Name</th>
-              <th style={{ width: '13%' }}>Ordered</th>
-              <th style={{ width: '13%' }}>Stock</th>
-              <th style={{ width: '13%' }}>Location</th>
+              <th style={{ width: '14%' }}>Material Code</th>
+              <th style={{ width: '25%' }}>Material Name</th>
+              <th style={{ width: '10%' }}>Ordered</th>
+              <th style={{ width: '10%' }}>Stock</th>
+              <th style={{ width: '8%' }}>GST (%)</th>
+              <th style={{ width: '10%' }}>Rate (₹)</th>
+              <th style={{ width: '9%' }}>Location</th>
               <th className={styles.noPrint} style={{ width: '8%' }}>Actions</th>
             </tr>
           </thead>
@@ -382,7 +412,16 @@ export default function PurchasePrimary() {
                 <td className={styles.textLeft}>{material.name}</td>
                 <td className={styles.textCenter}>{material.ordered}</td>
                 <td className={styles.textCenter}>{material.stock}</td>
-                <td className={styles.textCenter}>{getLocationName(material.location)}</td>
+                <td className={styles.textCenter}>{material.gst ?? 0}</td>
+                <td className={styles.textRight}>
+                  {Number(material.rate ?? 0).toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </td>
+                <td className={styles.textCenter}>
+                  {getMaterialLocationName(material.location, purchase.location, locationName)}
+                </td>
                 <td className={`${styles.textCenter} ${styles.noPrint}`}>
                   <button className={styles.iconBtnEdit} onClick={() => openEditModal(material)} title="Edit RawMaterial">
                     <FaPencilAlt />
@@ -398,7 +437,7 @@ export default function PurchasePrimary() {
               </tr>
             )) : (
               <tr>
-                <td colSpan={7} className={styles.emptyTableText}>
+                <td colSpan={9} className={styles.emptyTableText}>
                   No RawMaterials added to this purchase order yet.
                 </td>
               </tr>
@@ -504,6 +543,16 @@ export default function PurchasePrimary() {
                   <div className={styles.formGroup}>
                     <label>Stock *</label>
                     <input type="number" min="0" required value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} />
+                  </div>
+                </div>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label>GST (%)</label>
+                    <input type="number" min="0" step="0.01" value={form.gst} onChange={(event) => setForm({ ...form, gst: event.target.value })} />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Rate (₹)</label>
+                    <input type="number" min="0" step="0.01" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} />
                   </div>
                 </div>
                 <div className={styles.formGroup}>

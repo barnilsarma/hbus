@@ -99,7 +99,7 @@ export default function Stock() {
       try {
         const [rawResponse, productResponse] = await Promise.all([
           axios.get(`${import.meta.env.VITE_APP_API}/api/rawmaterials/location/${selectedLocationId}`),
-          axios.get(`${import.meta.env.VITE_APP_API}/api/primary/location/${selectedLocationId}`),
+          axios.get(`${import.meta.env.VITE_APP_API}/api/primaries/location/${selectedLocationId}`),
         ]);
         const rawResult = getResponseData(rawResponse);
         const productResult = getResponseData(productResponse);
