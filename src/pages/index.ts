@@ -9,4 +9,6 @@ import POFormat from "./purchase/POFormat";
 import PurchasePrimary from "./purchase/PurchasePrimary";
 import Store from "./store/Store";
 import Stock from "./store/Stock";
-export {Home, Register, Users, Purchase, PurchaseNew,Location, POFormat, PurchasePrimary, Store, Stock};
+import Dispatch from "./dispatch/Dispatch";
+import DispatchDetail from "./dispatch/DispatchDetail";
+export {Home, Register, Users, Purchase, PurchaseNew,Location, POFormat, PurchasePrimary, Store, Stock, Dispatch, DispatchDetail};
