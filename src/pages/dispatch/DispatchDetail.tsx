@@ -5,7 +5,27 @@ import { toast } from 'sonner';
 import { FaArrowLeft, FaPrint } from 'react-icons/fa';
 import styles from './DispatchDetail.module.scss';
 
-type Location = string | { _id?: string; id?: string; name?: string; address?: string; gstn?: string };
+type LocationObj = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  address?: string;
+  gstn?: string;
+};
+
+type ItemRef = {
+  _id?: string;
+  name?: string;
+  mcode?: string;
+  HSNCode?: string;
+};
+
+type AccessoryEntry = {
+  _id?: string;
+  item?: ItemRef | string;
+  quantity?: number;
+};
+
 type DispatchRecord = {
   _id?: string;
   id?: string;
@@ -14,15 +34,17 @@ type DispatchRecord = {
   dateOfDelivery?: string;
   type?: 'PRIMARY' | 'SECONDARY';
   description?: string;
-  new?: string;
-  REP?: string;
+  item?: ItemRef | string;
+  quantity?: number;
+  accessories?: AccessoryEntry[];
+  HSNCode?: string;
   DTRSerialNo?: string;
   rate?: number;
   gstno?: string;
   vehicleDetails?: string;
   partyName?: string;
   destination?: string;
-  location?: Location;
+  location?: LocationObj | string;
 };
 
 const getResponseData = (data: unknown): DispatchRecord => {
@@ -82,10 +104,15 @@ export default function DispatchDetail() {
     );
   }
 
-  const location = typeof record.location === 'object' && record.location !== null
-    ? record.location
-    : undefined;
-  const locationName = location?.name || location?.address || (typeof record.location === 'string' ? record.location : '-');
+  // Extract main item name and HSN code safely
+  const mainItem = typeof record.item === 'object' && record.item !== null ? record.item : undefined;
+  const itemName = mainItem?.name || record.description || '-';
+  const itemHsn = record.HSNCode || mainItem?.HSNCode || '-';
+
+  // Consignee location information
+  const locationObj = typeof record.location === 'object' && record.location !== null ? record.location : undefined;
+  const consigneeAddress = locationObj?.address || record.destination || '-';
+  const consigneeGstn = record.gstno || locationObj?.gstn || '-';
 
   return (
     <main className={styles.page}>
@@ -95,69 +122,103 @@ export default function DispatchDetail() {
           <FaPrint aria-hidden="true" /> Print challan
         </button>
       </nav>
+
       <article className={styles.challan}>
+        {/* Header Header */}
         <header className={styles.documentHeader}>
-          <div>
-            <p className={styles.company}>HBUS</p>
-            <p className={styles.tagline}>Equipment Manufacturing Company</p>
+          <div className={styles.brandTitle}>
+            <span className={styles.brandHbus}>H-BUS</span>
+            <span className={styles.brandCompany}>EQUIPMENT MANUFACTURING COMPANY</span>
           </div>
-          <div className={styles.documentType}>
-            <p>GOODS DISPATCH</p>
-            <h1>DELIVERY CHALLAN</h1>
-            <span>{displayValue(record.type)}</span>
-          </div>
+          <p className={styles.tagline}>A Synonym of Excellence</p>
+          <p className={styles.addressSub}>Industrial Growth Centre, Matia, (Mornai), Goalpara, Assam, 783101</p>
         </header>
 
-        <section className={styles.numberGrid}>
-          <div><span>Challan No.</span><strong>{displayValue(record.challanNo)}</strong></div>
-          <div><span>Invoice No.</span><strong>{displayValue(record.invoiceNo)}</strong></div>
-          <div><span>Date of delivery</span><strong>{formatDate(record.dateOfDelivery)}</strong></div>
-        </section>
+        <div className={styles.metaRow}>
+          <span><strong>Challan No:</strong> {displayValue(record.challanNo)}</span>
+          <span><strong>Date:</strong> {formatDate(record.dateOfDelivery)}</span>
+        </div>
 
+        {/* Consignor & Consignee Grid */}
         <section className={styles.partyGrid}>
           <div className={styles.infoBlock}>
-            <h2>Consignee / Party</h2>
-            <p className={styles.partyName}>{displayValue(record.partyName)}</p>
-            <p>{displayValue(record.gstno)}</p>
+            <h2>Consignor:</h2>
+            <p className={styles.partyName}><strong>H-BUS EQUIPMENT MANUFACTURING COMPANY</strong></p>
+            <p>Industrial Growth Centre, Matia, (Mornai),<br />Goalpara, Assam, 783101</p>
+            <p><strong>GSTN:</strong> 18AAKFH9190C1Z5</p>
           </div>
           <div className={styles.infoBlock}>
-            <h2>Dispatch details</h2>
-            <p><span>Location</span><strong>{locationName}</strong></p>
-            <p><span>Destination</span><strong>{displayValue(record.destination)}</strong></p>
-            <p><span>Vehicle</span><strong>{displayValue(record.vehicleDetails)}</strong></p>
+            <h2>Consignee:</h2>
+            <p className={styles.partyName}><strong>{displayValue(record.partyName)}</strong></p>
+            <p>{consigneeAddress}</p>
+            <p><strong>GSTN:</strong> {displayValue(consigneeGstn)}</p>
           </div>
         </section>
 
-        <section className={styles.descriptionBlock}>
-          <h2>Goods / Description</h2>
-          <p>{displayValue(record.description)}</p>
-        </section>
+        <p className={styles.instructionNote}>
+          <em>Please receive the following materials in good order and condition and return the original &amp; duplicate copy duly signed.</em>
+        </p>
 
+        {/* Main Items Table */}
         <table className={styles.detailsTable}>
           <thead>
-            <tr><th>New</th><th>REP</th><th>DTR Serial No.</th><th>Rate</th></tr>
+            <tr>
+              <th style={{ width: '8%' }}>SL No</th>
+              <th>Material&apos;s Description</th>
+              <th style={{ width: '18%' }}>HSN Code</th>
+              <th style={{ width: '15%' }}>Quantity</th>
+            </tr>
           </thead>
           <tbody>
             <tr>
-              <td>{displayValue(record.new)}</td>
-              <td>{displayValue(record.REP)}</td>
-              <td>{displayValue(record.DTRSerialNo)}</td>
-              <td>{record.rate === undefined ? '-' : Number(record.rate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className={styles.center}>1</td>
+              <td>
+                <div className={styles.mainDesc}>{itemName}</div>
+                {record.DTRSerialNo && (
+                  <div className={styles.serialNo}><em>SL No: {record.DTRSerialNo}</em></div>
+                )}
+                
+                {/* Accessories Sublist */}
+                {record.accessories && record.accessories.length > 0 && (
+                  <div className={styles.accessoriesSection}>
+                    <p className={styles.accTitle}>Accessories like:</p>
+                    <ul className={styles.accList}>
+                      {record.accessories.map((acc, idx) => {
+                        const accItem = typeof acc.item === 'object' && acc.item !== null ? acc.item : undefined;
+                        const accName = accItem?.name || 'Accessory Item';
+                        return (
+                          <li key={idx}>
+                            <span className={styles.accBullet}>•</span>
+                            <span className={styles.accName}>{accName}</span>
+                            <span className={styles.accQty}>{displayValue(acc.quantity)} Nos.</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </td>
+              <td className={styles.center}>{displayValue(itemHsn)}</td>
+              <td className={styles.center}>{displayValue(record.quantity)} Nos.</td>
             </tr>
           </tbody>
         </table>
 
+        {/* Vehicle Information */}
+        {record.vehicleDetails && (
+          <div className={styles.vehicleBlock}>
+            <p className={styles.vehicleTitle}>Motor Vehicle No</p>
+            <p className={styles.vehicleNumber}><strong>{record.vehicleDetails}</strong></p>
+          </div>
+        )}
+
+        {/* Signatures */}
         <section className={styles.receipt}>
-          <p>Received the above goods in good condition.</p>
           <div className={styles.signatureGrid}>
-            <div><span>Receiver's signature</span></div>
+            <div><span>Receiver&apos;s signature</span></div>
             <div><span>Authorized signatory</span></div>
           </div>
         </section>
-        <footer className={styles.documentFooter}>
-          <span>Dispatch type: {displayValue(record.type)}</span>
-          <span>Challan No.: {displayValue(record.challanNo)}</span>
-        </footer>
       </article>
     </main>
   );

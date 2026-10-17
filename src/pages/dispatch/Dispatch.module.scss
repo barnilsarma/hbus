@@ -143,7 +143,7 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 980px;
+  min-width: 1900px;
 
   th,
   td {
@@ -180,6 +180,49 @@
 .descriptionCell {
   max-width: 280px;
   white-space: normal;
+}
+
+.deleteButton {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 10px;
+  color: #fecdd3;
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: 8px;
+  background: rgba(159, 18, 57, 0.16);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+}
+
+.editButton {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-right: 7px;
+  padding: 7px 10px;
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.13);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
 }
 
 .typeBadge {
@@ -296,6 +339,67 @@
 
 .fullWidth { grid-column: 1 / -1; }
 
+.accessorySection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.accessoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #e2e8f0;
+}
+
+.accessoryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: #cbd5e1;
+    font-size: 0.82rem;
+    font-weight: 650;
+  }
+
+  input,
+  select {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 11px;
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    outline: none;
+    background: #111827;
+    font: inherit;
+
+    &:focus { border-color: #3b82f6; }
+  }
+}
+
+.removeAccessoryButton {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: #fecdd3;
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: 8px;
+  background: rgba(159, 18, 57, 0.16);
+  cursor: pointer;
+}
+
 .modalActions {
   display: flex;
   justify-content: flex-end;
@@ -316,4 +420,6 @@
   .formGrid { grid-template-columns: 1fr; }
   .fullWidth { grid-column: auto; }
   .modal { padding: 19px 15px; }
+  .accessoryRow { grid-template-columns: 1fr auto; }
+  .accessoryRow label:first-child { grid-column: 1 / -1; }
 }
