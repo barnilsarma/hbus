@@ -11,4 +11,5 @@ import Store from "./store/Store";
 import Stock from "./store/Stock";
 import Dispatch from "./dispatch/Dispatch";
 import DispatchDetail from "./dispatch/DispatchDetail";
-export {Home, Register, Users, Purchase, PurchaseNew,Location, POFormat, PurchasePrimary, Store, Stock, Dispatch, DispatchDetail};
+import Booking from "./booking/Booking";
+export {Home, Register, Users, Purchase, PurchaseNew,Location, POFormat, PurchasePrimary, Store, Stock, Dispatch, DispatchDetail, Booking};

@@ -15,6 +15,7 @@ function App() {
           <Route path="/purchase/new" element={<pages.PurchaseNew />} />
           <Route path="/dispatch" element={<pages.Dispatch />} />
           <Route path="/dispatch/:id" element={<pages.DispatchDetail />} />
+          <Route path="/booking" element={<pages.Booking />} />
           <Route path="/purchase-primary" element={<pages.Purchase primary />} />
           <Route path="/purchase-primary/new" element={<pages.PurchaseNew primary />} />
           <Route path="/location" element={<pages.Location />} />

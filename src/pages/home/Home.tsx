@@ -151,6 +151,9 @@ const Home = () => {
                             {(userRole === 'A' || userRole === 'B') && (
                                 <button onClick={() => navigate('/location')}>LOCATIONS</button>
                             )}
+                            {(userRole === 'A' || userRole === 'B') && (
+                                <button onClick={() => navigate('/booking')}>BOOKINGS</button>
+                            )}
                             {userRole === 'A' && (
                                 <button onClick={() => navigate('/users')}>USERS</button>
                             )}
