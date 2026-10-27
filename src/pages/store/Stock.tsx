@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import styles from './Stock.module.scss';
+import DepartmentAccessManager from '../../components/DepartmentAccessManager';
 
 type Location = {
   _id: string;
@@ -363,6 +364,7 @@ export default function Stock() {
           <p>Raw materials and finished product inventory.</p>
         </div>
         <div className={styles.headerActions}>
+          <DepartmentAccessManager department="Stock" />
           {isAdmin && (
             <label className={styles.locationField}>
               Location

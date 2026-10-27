@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { FaPlus, FaPencilAlt, FaTrash, FaTimes, FaCheck } from 'react-icons/fa';
 import styles from './Store.module.scss';
+import DepartmentAccessManager from '../../components/DepartmentAccessManager';
 
 export interface Location {
   _id: string;
@@ -417,6 +418,7 @@ const Store: React.FC = () => {
         <h1 className={styles.title}>Store Catalogue</h1>
 
         <div className={styles.controls}>
+          <DepartmentAccessManager department="Store" />
           {userType === 'A' && (
             <div className={styles.locationGroup}>
               <label htmlFor="locationSelect">Location:</label>

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { FaArrowLeft, FaPlus, FaPencilAlt, FaTrash, FaTimes, FaMapMarkerAlt } from 'react-icons/fa';
 import styles from './Booking.module.scss';
+import DepartmentAccessManager from '../../components/DepartmentAccessManager';
 
 type Location = {
   _id?: string;
@@ -335,6 +336,7 @@ export default function Booking() {
                 </select>
               </label>
             )}
+            <DepartmentAccessManager department="Booking" />
             <button type="button" className={styles.primaryButton} onClick={openCreateForm}>
               <FaPlus aria-hidden="true" /> Create booking
             </button>

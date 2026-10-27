@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { FaArrowLeft, FaMapMarkerAlt, FaPlus, FaTimes, FaPencilAlt, FaTrash } from 'react-icons/fa';
 import styles from './Dispatch.module.scss';
+import DepartmentAccessManager from '../../components/DepartmentAccessManager';
 
 type Location = {
   _id?: string;
@@ -445,6 +446,7 @@ export default function Dispatch() {
                 </select>
               </label>
             )}
+            <DepartmentAccessManager department="Dispatch" />
             <button type="button" className={styles.primaryButton} onClick={openCreateForm}>
               <FaPlus aria-hidden="true" /> Create new
             </button>
