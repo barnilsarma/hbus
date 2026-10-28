@@ -154,6 +154,9 @@ const Home = () => {
                             {(userRole === 'A' || userRole === 'B') && (
                                 <button onClick={() => navigate('/booking')}>BOOKINGS</button>
                             )}
+                            {((userRole === 'A' || userRole === 'B') || (viewaccess.findIndex((item) => item === 'Store') !== -1 || editaccess.findIndex((item) => item === 'Store') !== -1)) && (
+                                <button onClick={() => navigate('/store')}>STORE</button>
+                            )}
                             {userRole === 'A' && (
                                 <button onClick={() => navigate('/users')}>USERS</button>
                             )}

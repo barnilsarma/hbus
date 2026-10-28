@@ -13,32 +13,47 @@ main{
         overflow-x:hidden;
         width: 100%;
         .navbar{
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(12rem, 18rem));
+            gap: 1rem;
+            width: fit-content;
+            max-width: calc(100% - 2rem);
+            align-items: stretch;
+            justify-content: center;
             animation: slideIn 1s ease-in-out;
             
             button{
-                min-width:20rem;
-                margin: 1rem;
-                padding:1rem;
+                min-width: 0;
+                min-height: 8rem;
+                margin: 0;
+                padding: 1.25rem;
                 border:0 solid transparent;
-                border-radius: 0.5rem;
+                border-radius: 0.75rem;
                 cursor:pointer;
-                font-size:1.5rem;
+                font-size:1rem;
                 background-color:#37c0ff;
                 color:#001620;
-                font-weight: 600;
-                box-shadow: 0 0 1rem #37c0ff;
-                scale:1;
-                transition-duration:0.5s;
+                font-weight: 700;
+                box-shadow: 0 0 1rem rgba(55, 192, 255, 0.55);
+                transform: scale(1);
+                transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
                 &:hover{
                     background-color:#b9e5ff;
-                    box-shadow: 0 0 2rem #b9e5ff;
-                    scale:1.05;
-                    border-radius: 1.7rem;
+                    box-shadow: 0 0 2rem rgba(185, 229, 255, 0.75);
+                    transform: translateY(-3px);
+                }
+            }
+
+            @media (max-width: 900px) {
+                grid-template-columns: repeat(2, minmax(12rem, 18rem));
+            }
+
+            @media (max-width: 560px) {
+                grid-template-columns: minmax(0, 18rem);
+                width: 100%;
+
+                button {
+                    min-height: 5rem;
                 }
             }
         }
