@@ -1,6 +1,7 @@
 import axios from "axios";
 import React, { useEffect, useState, useMemo } from "react";
 import styles from "./Location.module.scss";
+import DepartmentAccessManager from "../../components/DepartmentAccessManager";
 
 interface IUser {
   _id: string;
@@ -163,6 +164,7 @@ const Location: React.FC = () => {
     <div className={styles.container}>
       <header className={styles.header}>
         <h1 className={styles.title}>Locations</h1>
+        <DepartmentAccessManager department="Location" />
         {userRole === "A" && !locForm && (
           <button className={styles.primaryBtn} onClick={() => setLocForm(true)}>
             Add New Location

@@ -1,28 +1,47 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaPencilAlt, FaTrash, FaPrint, FaArrowLeft, FaTimes, FaSearch } from 'react-icons/fa';
 import styles from './POFormat.module.scss';
+
+const ITEM_TYPE = 'SECONDARY' as const;
+type ItemType = typeof ITEM_TYPE;
 
 type Item = {
   _id?: string;
+  type?: ItemType;
+  mcode?: string;
   description: string;
-  gst: number;
+  gst: number | string;
   unit: string;
-  rate: number;
-  qty: number;
+  rate: number | string;
+  qty: number | string;
+  newQty?: number | string;
+  receivedqtyOriginal?: number | string;
+  receivedqtyNew?: number | string;
+  location?: string;
 };
 
-const initialItemState: Item = {
+type ItemForm = Omit<Item, 'type'> & {
+  type: ItemType | '';
+};
+
+const initialItemState: ItemForm = {
+  type: ITEM_TYPE,
+  mcode: '',
   description: '',
   gst: 18,
   unit: 'NOS',
   rate: 0,
-  qty: 1,
+  qty: 0,
+  newQty: 0,
+  receivedqtyOriginal: 0,
+  receivedqtyNew: 0,
 };
 
-// Helper component to render individual character grid boxes
+const getOrderedQty = (item: Item): number => Math.max(0, Number(item.newQty || 0));
+
 const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '', minLength = 0 }) => {
   const chars = text.split('');
   while (chars.length < minLength) {
@@ -40,7 +59,6 @@ const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '',
   );
 };
 
-// Helper: Convert number to Indian Currency Words (Rupees & Paise)
 const numberToIndianWords = (num: number): string => {
   if (isNaN(num) || num < 0) return '';
   const [rupeesStr, paiseStr] = num.toFixed(2).split('.');
@@ -50,39 +68,10 @@ const numberToIndianWords = (num: number): string => {
   if (rupees === 0 && paise === 0) return 'Rupees Zero Only';
 
   const ones = [
-    '',
-    'One',
-    'Two',
-    'Three',
-    'Four',
-    'Five',
-    'Six',
-    'Seven',
-    'Eight',
-    'Nine',
-    'Ten',
-    'Eleven',
-    'Twelve',
-    'Thirteen',
-    'Fourteen',
-    'Fifteen',
-    'Sixteen',
-    'Seventeen',
-    'Eighteen',
-    'Nineteen',
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
   ];
-  const tens = [
-    '',
-    '',
-    'Twenty',
-    'Thirty',
-    'Forty',
-    'Fifty',
-    'Sixty',
-    'Seventy',
-    'Eighty',
-    'Ninety',
-  ];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
   const convertTwoDigits = (n: number): string => {
     if (n < 20) return ones[n];
@@ -136,10 +125,12 @@ export default function POFormat() {
   const [poData, setPoData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Modal & Form state for Adding/Editing Items
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemForm, setItemForm] = useState<Item>(initialItemState);
+  const [itemForm, setItemForm] = useState<ItemForm>(initialItemState);
+
+  const [searchMcode, setSearchMcode] = useState<string>('');
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
 
   const fetchPOData = async () => {
     try {
@@ -160,43 +151,118 @@ export default function POFormat() {
   const handleOpenAddModal = () => {
     setEditingItemId(null);
     setItemForm(initialItemState);
+    setSearchMcode('');
+    setSearchStatus('idle');
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (item: Item) => {
     setEditingItemId(item._id || null);
     setItemForm({
+      _id: item._id,
+      type: ITEM_TYPE,
+      mcode: item.mcode,
       description: item.description,
       gst: item.gst,
       unit: item.unit,
       rate: item.rate,
       qty: item.qty,
+      newQty: item.newQty ?? 0,
+      receivedqtyOriginal: item.receivedqtyOriginal ?? 0,
+      receivedqtyNew: item.receivedqtyNew ?? 0,
     });
+    setSearchStatus('idle');
     setIsModalOpen(true);
+  };
+
+  const handleSearchItem = async () => {
+    if (!searchMcode.trim()) {
+      toast.error('Please enter a Material Code');
+      return;
+    }
+
+    setSearchStatus('loading');
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_APP_API}/api/items/mcode/${searchMcode}`,
+      );
+      if (response.data) {
+        setItemForm({ ...response.data, type: ITEM_TYPE });
+        setSearchStatus('found');
+        toast.success('Item found!');
+      } else {
+        throw new Error('Item not found');
+      }
+    } catch (error: any) {
+      if (error.response?.status === 404 || error.message === 'Item not found') {
+        setSearchStatus('not-found');
+        setItemForm({ ...initialItemState, mcode: searchMcode });
+        toast.info('Item not found. You can add it as a new item.');
+      } else {
+        toast.error('Error searching for item.');
+        setSearchStatus('idle');
+      }
+    }
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
+
     try {
+      const locationId = localStorage.getItem('hbus_selected_location_id');
+      if (!locationId) {
+        toast.error('Selected location not found in local storage. Please select a location first.');
+        return;
+      }
+
+      const currentItemIds = (poData?.items || [])
+        .map((item: string | { _id?: string }) =>
+          typeof item === 'string' ? item : item._id,
+        )
+        .filter((itemId: string | undefined): itemId is string => Boolean(itemId));
+      const linkItemToPO = async (itemId: string) => {
+        if (!currentItemIds.includes(itemId)) {
+          await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
+            items: [...currentItemIds, itemId],
+          });
+        }
+      };
+      const payload = {
+        type: ITEM_TYPE,
+        mcode: itemForm.mcode,
+        description: itemForm.description,
+        gst: Number(itemForm.gst ?? 0),
+        unit: itemForm.unit,
+        rate: Number(itemForm.rate ?? 0),
+        newQty: Number(itemForm.newQty ?? 0),
+        location: locationId,
+      };
       if (editingItemId) {
-        // Update item document directly via item endpoint
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${editingItemId}`, itemForm);
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${editingItemId}`, payload);
         toast.success('Item updated successfully.');
+      } else if (searchStatus === 'found') {
+        const targetId = itemForm._id;
+        if (!targetId) {
+          throw new Error('The selected item does not have an ID.');
+        }
+
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
+        await linkItemToPO(targetId);
+        toast.success('Item linked to PO successfully.');
       } else {
-        // Create a new item document in the Item collection
-        const itemRes = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, itemForm);
-        const newItemId = itemRes.data._id;
-
-        // Extract existing ObjectIds and push the newly created ObjectId to Purchase
-        const currentItemIds = (poData?.items || []).map((it: any) =>
-          typeof it === 'string' ? it : it._id,
-        );
-        const updatedItemIds = [...currentItemIds, newItemId];
-
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
-          items: updatedItemIds,
+        const itemResponse = await axios.post(`${import.meta.env.VITE_APP_API}/api/items`, {
+          ...payload,
+          qty: 0,
+          receivedqtyOriginal: 0,
+          receivedqtyNew: 0,
         });
-        toast.success('Item added successfully.');
+        const newItemId = itemResponse.data._id;
+
+        if (!newItemId) {
+          throw new Error('The created item does not have an ID.');
+        }
+        await linkItemToPO(newItemId);
+        toast.success('New item created and added to PO.');
       }
 
       await fetchPOData();
@@ -206,12 +272,10 @@ export default function POFormat() {
       toast.error(error.response?.data?.message || 'Failed to save item.');
     }
   };
-
   const handleDeleteItem = async (itemId: string) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    if (!window.confirm('Are you sure you want to remove this item from the Purchase Order?')) return;
 
     try {
-      // 1. Unlink item ID from Purchase document
       const updatedItemIds = (poData?.items || [])
         .map((it: any) => (typeof it === 'string' ? it : it._id))
         .filter((itId: string) => itId !== itemId);
@@ -220,14 +284,11 @@ export default function POFormat() {
         items: updatedItemIds,
       });
 
-      // 2. Remove item document from database
-      await axios.delete(`${import.meta.env.VITE_APP_API}/api/items/${itemId}`);
-
-      toast.success('Item deleted successfully.');
+      toast.success('Item removed from Purchase Order successfully.');
       await fetchPOData();
     } catch (error: any) {
-      console.error('Error deleting item:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete item.');
+      console.error('Error removing item from PO:', error);
+      toast.error(error.response?.data?.message || 'Failed to remove item from Purchase Order.');
     }
   };
 
@@ -239,20 +300,17 @@ export default function POFormat() {
     return <div className={styles.loadingContainer}>Loading Purchase Order...</div>;
   }
 
-  // Format Date for Boxed view (DD/MM/YYYY)
   const formattedDate =
     poData?.invoicedate || poData?.date
       ? new Date(poData.invoicedate || poData.date).toLocaleDateString('en-GB')
       : '';
 
-  // Dynamic Calculations based on items array
   const itemsList: Item[] = poData?.items || [];
   const totalWithoutTax = itemsList.reduce(
-    (sum, item) => sum + (item.rate || 0) * (item.qty || 0),
+    (sum, item) => sum + Number(item.rate || 0) * getOrderedQty(item),
     0,
   );
 
-  // Check GST state (Assam Code: 18 / Assam state) to split CGST/SGST vs IGST
   const isIntraState =
     poData?.supplierStateCode === '18' ||
     (poData?.supplierState || '').toLowerCase().includes('assam');
@@ -262,8 +320,8 @@ export default function POFormat() {
   let totalIGST = 0;
 
   itemsList.forEach((item) => {
-    const itemTotal = (item.rate || 0) * (item.qty || 0);
-    const taxAmount = itemTotal * ((item.gst || 0) / 100);
+    const itemTotal = Number(item.rate || 0) * getOrderedQty(item);
+    const taxAmount = itemTotal * (Number(item.gst || 0) / 100);
     if (isIntraState) {
       totalCGST += taxAmount / 2;
       totalSGST += taxAmount / 2;
@@ -276,7 +334,6 @@ export default function POFormat() {
   const grandTotal = totalWithoutTax + totalTax;
   const roundOffTotal = Math.round(grandTotal);
 
-  // Delivery target date (30 days after PO Date)
   const poDateObj = poData?.invoicedate || poData?.date ? new Date(poData.invoicedate || poData.date) : new Date();
   const deliveryDateObj = new Date(poDateObj);
   deliveryDateObj.setDate(deliveryDateObj.getDate() + 30);
@@ -284,7 +341,7 @@ export default function POFormat() {
 
   return (
     <div className={styles.pageWrapper}>
-      {/* Action Controls Bar (Hidden during Print) */}
+      {/* Action Controls Bar */}
       <div className={`${styles.actionBar} ${styles.noPrint}`}>
         <button className={styles.secondaryBtn} onClick={() => navigate('/purchase')}>
           <FaArrowLeft /> Back to Purchases
@@ -301,7 +358,6 @@ export default function POFormat() {
 
       {/* Main PO Document Sheet */}
       <div className={styles.poDocument}>
-        {/* Header Title */}
         <h1 className={styles.mainTitle}>PURCHASE ORDER</h1>
 
         {/* Company Header Row */}
@@ -367,12 +423,12 @@ export default function POFormat() {
         <table className={styles.itemsTable}>
           <thead>
             <tr>
-              <th style={{ width: '6%' }}>Sl No</th>
-              <th style={{ width: '44%' }}>Item Description</th>
-              <th style={{ width: '8%' }}>GST</th>
-              <th style={{ width: '8%' }}>Unit</th>
-              <th style={{ width: '12%' }}>Rate</th>
-              <th style={{ width: '7%' }}>Qty</th>
+              <th style={{ width: '5%' }}>Sl No</th>
+              <th style={{ width: '38%' }}>Item Description</th>
+              <th style={{ width: '7%' }}>GST</th>
+              <th style={{ width: '7%' }}>Unit</th>
+              <th style={{ width: '10%' }}>Rate</th>
+              <th style={{ width: '6%' }}>Qty</th>
               <th style={{ width: '15%' }}>Total Amount</th>
               <th className={styles.noPrint} style={{ width: '8%' }}>
                 Actions
@@ -382,7 +438,8 @@ export default function POFormat() {
           <tbody>
             {itemsList.length > 0 ? (
               itemsList.map((item: Item, index: number) => {
-                const totalAmount = (item.rate || 0) * (item.qty || 0);
+                const orderedQty = getOrderedQty(item);
+                const totalAmount = Number(item.rate || 0) * orderedQty;
                 return (
                   <tr key={item._id || index}>
                     <td className={styles.textCenter}>{index + 1}</td>
@@ -395,7 +452,8 @@ export default function POFormat() {
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className={styles.textCenter}>{item.qty}</td>
+                    <td className={styles.textCenter}>{orderedQty}</td>
+
                     <td className={styles.textRight}>
                       {totalAmount.toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
@@ -433,7 +491,6 @@ export default function POFormat() {
 
         {/* Calculation Summary & Bank Details Block */}
         <div className={styles.summaryGrid}>
-          {/* Left Column: Words & Bank Details */}
           <div className={styles.summaryLeft}>
             <div className={styles.wordsRow}>
               <span className={styles.wordsLabel}>₹ (in words):</span>
@@ -465,7 +522,6 @@ export default function POFormat() {
             </div>
           </div>
 
-          {/* Right Column: Amount Breakdowns */}
           <div className={styles.summaryRight}>
             <table className={styles.breakdownTable}>
               <tbody>
@@ -487,9 +543,9 @@ export default function POFormat() {
                   <td className={styles.amountCol}>
                     {totalCGST > 0
                       ? totalCGST.toLocaleString('en-IN', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                       : ''}
                   </td>
                 </tr>
@@ -498,9 +554,9 @@ export default function POFormat() {
                   <td className={styles.amountCol}>
                     {totalSGST > 0
                       ? totalSGST.toLocaleString('en-IN', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                       : ''}
                   </td>
                 </tr>
@@ -509,9 +565,9 @@ export default function POFormat() {
                   <td className={styles.amountCol}>
                     {totalIGST > 0
                       ? totalIGST.toLocaleString('en-IN', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                       : ''}
                   </td>
                 </tr>
@@ -572,9 +628,7 @@ export default function POFormat() {
             <p className={styles.companySignTitle}>
               For H-BUS Equipment Manufacturing Company
             </p>
-            <div className={styles.signatureSpace}>
-              {/* Optional Signature image or space */}
-            </div>
+            <div className={styles.signatureSpace}></div>
             <p className={styles.signatoryLabel}>Authorised Signatory</p>
           </div>
         </div>
@@ -600,76 +654,146 @@ export default function POFormat() {
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleSaveItem} className={styles.modalForm}>
-              <div className={styles.formGroup}>
-                <label>Item Description *</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={itemForm.description}
-                  onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-                  placeholder="Enter detailed item description..."
-                />
+
+            <div className={styles.modalBody}>
+              <div className={styles.linkContainer} style={{ marginBottom: '15px' }}>
+                <Link to="/store" className={styles.catalogueLink} style={{ color: '#0056b3', textDecoration: 'underline' }}>
+                  See Items Catalogue
+                </Link>
               </div>
 
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label>GST (%) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={itemForm.gst}
-                    onChange={(e) => setItemForm({ ...itemForm, gst: Number(e.target.value) })}
-                  />
+              {!editingItemId && searchStatus === 'idle' && (
+                <div className={styles.searchSection} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <div className={styles.formGroup} style={{ flex: 1 }}>
+                    <label>Search item by Material Code (e.g., H0001)</label>
+                    <input
+                      type="text"
+                      value={searchMcode}
+                      onChange={(e) => setSearchMcode(e.target.value)}
+                      placeholder="Enter MCode"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSearchItem}
+                    className={styles.primaryBtn}
+                    style={{ marginTop: '24px' }}
+                  >
+                    <FaSearch /> Search
+                  </button>
                 </div>
-                <div className={styles.formGroup}>
-                  <label>Unit *</label>
-                  <input
-                    type="text"
-                    required
-                    value={itemForm.unit}
-                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-                    placeholder="e.g. NOS, KG, SET"
-                  />
-                </div>
-              </div>
+              )}
 
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label>Rate (₹) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={itemForm.rate}
-                    onChange={(e) => setItemForm({ ...itemForm, rate: Number(e.target.value) })}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Quantity *</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={itemForm.qty}
-                    onChange={(e) => setItemForm({ ...itemForm, qty: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
+              {searchStatus === 'loading' && <p>Searching...</p>}
 
-              <div className={styles.modalActions}>
-                <button
-                  type="button"
-                  className={styles.secondaryBtn}
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className={styles.primaryBtn}>
-                  {editingItemId ? 'Update Item' : 'Add Item'}
-                </button>
-              </div>
-            </form>
+              {(editingItemId || searchStatus === 'found' || searchStatus === 'not-found') && (
+                <form onSubmit={handleSaveItem} className={styles.modalForm}>
+                  {searchStatus === 'found' && !editingItemId && (
+                    <div className={styles.foundItemDetails} style={{ padding: '10px', background: '#f5f5f5', borderRadius: '5px', marginBottom: '15px' }}>
+                      <p><strong>Material Code:</strong> {itemForm.mcode}</p>
+                      <p><strong>Description:</strong> {itemForm.description}</p>
+                      <p><strong>Unit:</strong> {itemForm.unit}</p>
+                      <p><strong>Rate:</strong> ₹{itemForm.rate}</p>
+                      <p><strong>GST:</strong> {itemForm.gst}%</p>
+                    </div>
+                  )}
+
+                  {(searchStatus === 'not-found' || editingItemId) && (
+                    <>
+                      <div className={styles.formGroup}>
+                        <label>Material Code *</label>
+                        <input
+                          type="text"
+                          required
+                          value={itemForm.mcode}
+                          onChange={(e) => setItemForm({ ...itemForm, mcode: e.target.value })}
+                          placeholder="e.g. H0001"
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label>Item Description *</label>
+                        <textarea
+                          rows={3}
+                          required
+                          value={itemForm.description}
+                          onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+                          placeholder="Enter detailed item description..."
+                        />
+                      </div>
+
+                      <div className={styles.formRow}>
+                        <div className={styles.formGroup}>
+                          <label>GST (%) *</label>
+                          <input
+                            type="number"
+                            required
+                            value={itemForm.gst ?? ''}
+                            onChange={(e) => setItemForm({ ...itemForm, gst: e.target.value })}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Unit *</label>
+                          <input
+                            type="text"
+                            required
+                            value={itemForm.unit}
+                            onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                            placeholder="e.g. NOS, KG, SET"
+                          />
+                        </div>
+                      </div>
+
+                      <div className={styles.formRow}>
+                        <div className={styles.formGroup}>
+                          <label>Rate (₹) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={itemForm.rate ?? ''}
+                            onChange={(e) => setItemForm({ ...itemForm, rate: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className={styles.formGroup}>
+                    <label>New Quantity</label>
+                    <input
+                      type="number"
+                      required
+                      value={itemForm.newQty ?? ''}
+                      onChange={(e) => setItemForm({ ...itemForm, newQty: e.target.value })}
+                    />
+                  </div>
+
+                  <div className={styles.modalActions}>
+                    <button
+                      type="button"
+                      className={styles.secondaryBtn}
+                      onClick={() => {
+                        if (searchStatus !== 'idle' && !editingItemId) {
+                          setSearchStatus('idle');
+                        } else {
+                          setIsModalOpen(false);
+                        }
+                      }}
+                    >
+                      {searchStatus !== 'idle' && !editingItemId ? 'Back' : 'Cancel'}
+                    </button>
+                    <button type="submit" className={styles.primaryBtn}>
+                      {editingItemId
+                        ? 'Update Item'
+                        : searchStatus === 'found'
+                          ? 'Add Found Item to PO'
+                          : 'Create & Add Item'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       )}

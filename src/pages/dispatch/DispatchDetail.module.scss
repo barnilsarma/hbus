@@ -1,0 +1,191 @@
+.challan {
+  background: #fff;
+  padding: 2rem;
+  border: 1px solid #000;
+  max-width: 850px;
+  margin: 1rem auto;
+  font-family: Arial, sans-serif;
+  color: #000;
+}
+
+.documentHeader {
+  text-align: center;
+  border-bottom: 2px solid #000;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+
+  .brandTitle {
+    font-size: 1.8rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+    
+    .brandHbus {
+      color: #c00000; // Red accent for H-BUS
+    }
+    .brandCompany {
+      color: #000;
+    }
+  }
+
+  .tagline {
+    font-style: italic;
+    font-weight: bold;
+    font-size: 0.95rem;
+    margin-top: 2px;
+  }
+
+  .addressSub {
+    font-size: 0.85srem;
+    margin-top: 2px;
+  }
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.partyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  .infoBlock {
+    border: 1px solid #000;
+    padding: 0.75rem;
+    min-height: 110px;
+
+    h2 {
+      font-size: 0.9rem;
+      text-decoration: underline;
+      margin-bottom: 0.3rem;
+      font-weight: bold;
+    }
+
+    p {
+      font-size: 0.85rem;
+      line-height: 1.3;
+    }
+  }
+}
+
+.instructionNote {
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+}
+
+.detailsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+
+  th, td {
+    border: 1px solid #000;
+    padding: 0.50rem;
+    font-size: 0.9rem;
+    vertical-align: top;
+  }
+
+  th {
+    background-color: #f2f2f2;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .center {
+    text-align: center;
+  }
+
+  .mainDesc {
+    font-weight: bold;
+  }
+
+  .serialNo {
+    margin-top: 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  .accessoriesSection {
+    margin-top: 0.75rem;
+    
+    .accTitle {
+      font-weight: bold;
+      font-size: 0.85rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .accList {
+      list-style: none;
+      padding-left: 0.5rem;
+
+      li {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        padding: 2px 0;
+
+        .accBullet {
+          margin-right: 6px;
+        }
+        .accName {
+          flex: 1;
+        }
+        .accQty {
+          text-align: right;
+          min-width: 70px;
+        }
+      }
+    }
+  }
+}
+
+.vehicleBlock {
+  text-align: center;
+  margin: 1.5rem 0;
+  
+  .vehicleTitle {
+    font-weight: bold;
+    text-decoration: underline;
+    font-size: 0.9rem;
+  }
+  .vehicleNumber {
+    font-size: 1.1rem;
+    margin-top: 0.2rem;
+  }
+}
+
+.receipt {
+  margin-top: 3rem;
+  
+  .signatureGrid {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4rem;
+
+    div {
+      border-top: 1px solid #000;
+      padding-top: 0.3rem;
+      width: 200px;
+      text-align: center;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+  }
+}
+
+@media print {
+  .noPrint {
+    display: none !important;
+  }
+  .challan {
+    border: none;
+    padding: 0;
+    margin: 0;
+    max-width: 100%;
+  }
+}

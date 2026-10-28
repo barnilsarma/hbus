@@ -5,19 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import styles from './Purchase.module.scss';
 import { FaPencilAlt, FaFilter, FaTimes, FaMapMarkerAlt } from 'react-icons/fa';
-
-type User = {
-  userId?: string;
-  _id?: string;
-  id?: string;
-  name?: string;
-  email?: string;
-  role?: string;
-  viewaccess?: string[];
-  editaccess?: string[];
-  location?: any;
-  locations?: any[];
-};
+import DepartmentAccessManager from '../../components/DepartmentAccessManager';
 
 const getEntityId = (value: unknown): string | null => {
   if (typeof value === 'string') return value;
@@ -145,7 +133,7 @@ const normalizeFieldValue = (field: string, value: string) => {
   return value;
 };
 
-const Purchase = () => {
+const Purchase = ({ primary = false }: { primary?: boolean }) => {
   const navigate = useNavigate();
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -170,13 +158,6 @@ const Purchase = () => {
   const [editItem, setEditItem] = useState<PurchaseItem | null>(null);
   const [editField, setEditField] = useState<string>('');
   const [editValue, setEditValue] = useState<string>('');
-
-  const [showAccessModal, setShowAccessModal] = useState(false);
-  const [users, setUsers] = useState<User[]>([]);
-  const [showAccessCheckModal, setShowAccessCheckModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [viewAccess, setViewAccess] = useState(false);
-  const [editAccess, setEditAccess] = useState(false);
 
   const role = localStorage.getItem('hbus_user_role');
   const isTypeA = role === 'A';
@@ -227,7 +208,8 @@ const Purchase = () => {
     }
   }, [isAdmin]);
 
-  const columns = visibleFields;
+  const columns = primary ? visibleFields.filter((field) => field !== 'receivedqty') : visibleFields;
+  const purchasesEndpoint = primary ? '/api/raw-material-pos' : '/api/purchases';
 
   const loadLocations = async () => {
     try {
@@ -245,7 +227,7 @@ const Purchase = () => {
     try {
       await toast.promise(
         (async () => {
-          const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/purchases`);
+          const response = await axios.get(`${import.meta.env.VITE_APP_API}${purchasesEndpoint}`);
           const data: PurchaseItem[] = Array.isArray(response.data) ? response.data : [];
           setPurchases(data);
           setError(null);
@@ -277,82 +259,6 @@ const Purchase = () => {
     }
   };
 
-  const loadUsers = async () => {
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_APP_API}/api/users`);
-      setUsers(Array.isArray(response.data) ? response.data : []);
-    } catch (err) {
-      toast.error('Failed to load user list.');
-    }
-  };
-
-  const openManageAccess = async () => {
-    await loadUsers();
-    setShowAccessModal(true);
-  };
-
-  const openAccessModal = (user: User) => {
-    setSelectedUser(user);
-    setViewAccess(hasDepartmentAccess(user.viewaccess, PURCHASE_DEPARTMENT));
-    setEditAccess(hasDepartmentAccess(user.editaccess, PURCHASE_DEPARTMENT));
-    setShowAccessCheckModal(true);
-  };
-
-  const closeAccessCheckModal = () => {
-    setSelectedUser(null);
-    setShowAccessCheckModal(false);
-  };
-
-  const saveAccessChanges = async () => {
-    if (!selectedUser) return;
-    const userId = getEntityId(selectedUser);
-    if (!userId) {
-      toast.error('Invalid user selected.');
-      return;
-    }
-
-    try {
-      const currentView = selectedUser.viewaccess || [];
-      const currentEdit = selectedUser.editaccess || [];
-
-      const hasViewNow = currentView.some(
-        (d) => d.trim().toLowerCase() === PURCHASE_DEPARTMENT.toLowerCase()
-      );
-      const hasEditNow = currentEdit.some(
-        (d) => d.trim().toLowerCase() === PURCHASE_DEPARTMENT.toLowerCase()
-      );
-
-      // 1. Handle View Access changes
-      if (viewAccess && !hasViewNow) {
-        await axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
-          department: PURCHASE_DEPARTMENT,
-          access: 'view',
-        });
-      } else if (!viewAccess && hasViewNow) {
-        await axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
-          data: { department: PURCHASE_DEPARTMENT, access: 'view' },
-        });
-      }
-
-      // 2. Handle Edit Access changes
-      if (editAccess && !hasEditNow) {
-        await axios.patch(`${import.meta.env.VITE_APP_API}/api/users/${userId}`, {
-          department: PURCHASE_DEPARTMENT,
-          access: 'edit',
-        });
-      } else if (!editAccess && hasEditNow) {
-        await axios.delete(`${import.meta.env.VITE_APP_API}/api/users/revoke/${userId}`, {
-          data: { department: PURCHASE_DEPARTMENT, access: 'edit' },
-        });
-      }
-
-      toast.success('User access permissions updated.');
-      closeAccessCheckModal();
-      loadUsers();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update access settings.');
-    }
-  };
   const openEditModal = (item: PurchaseItem, field: string) => {
     if (!canEditItems) return;
     setEditItem(item);
@@ -392,7 +298,7 @@ const Purchase = () => {
 
     try {
       await toast.promise(
-        axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${itemId}`, {
+        axios.put(`${import.meta.env.VITE_APP_API}${purchasesEndpoint}/${itemId}`, {
           [editField]: payloadValue,
         }),
         {
@@ -706,8 +612,11 @@ const Purchase = () => {
                   </td>
                 ))}
                 <td>
-                  <Link to={`/PO/${getEntityId(item)}`} className="text-[#110055] bg-[#ffffff]">
-                    GENERATE PO
+                  <Link
+                    to={primary ? `/purchase-primary/${getEntityId(item)}` : `/PO/${getEntityId(item)}`}
+                    className="text-[#110055] bg-[#ffffff]"
+                  >
+                    {primary ? 'MANAGE RAW MATERIALS' : 'GENERATE PO'}
                   </Link>
                 </td>
               </tr>
@@ -723,8 +632,8 @@ const Purchase = () => {
       <section className={styles.card}>
         <div className={styles.header}>
           <div>
-            <h1>Purchase Orders</h1>
-            <p>Review and manage purchase entries.</p>
+            <h1>{primary ? 'Raw Material Purchase Orders' : 'Purchase Orders'}</h1>
+            <p>{primary ? 'Review and manage raw material purchase orders.' : 'Review and manage purchase entries.'}</p>
           </div>
           <div className={styles.actions}>
             {isTypeA && (
@@ -770,12 +679,12 @@ const Purchase = () => {
               </button>
             )}
 
-            {isAdmin && (
-              <button type="button" className={styles.createButton} onClick={openManageAccess}>
-                Manage Access
-              </button>
-            )}
-            <button type="button" className={styles.createButton} onClick={() => navigate('/purchase/new')}>
+            <DepartmentAccessManager department={PURCHASE_DEPARTMENT} />
+            <button
+              type="button"
+              className={styles.createButton}
+              onClick={() => navigate(primary ? '/purchase-primary/new' : '/purchase/new')}
+            >
               Create
             </button>
             <button type="button" className={styles.backButton} onClick={() => navigate('/')}>
@@ -833,68 +742,6 @@ const Purchase = () => {
         </div>
       )}
 
-      {/* Manage Access User List Modal */}
-      {showAccessModal && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
-            <h2>Manage User Access</h2>
-            <p className={styles.modalSub}>Select a user to modify department access permissions.</p>
-            <div className={styles.userList}>
-              {users.map((u) => (
-                <div key={getEntityId(u) || u.email} className={styles.userItem}>
-                  <div>
-                    <strong>{u.name || u.email}</strong>
-                    <span className={styles.userEmail}>{u.email}</span>
-                  </div>
-                  <button type="button" className={styles.secondaryButton} onClick={() => openAccessModal(u)}>
-                    Edit Access
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className={styles.modalActions}>
-              <button type="button" className={styles.secondaryButton} onClick={() => setShowAccessModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Individual Access Level Modal */}
-      {showAccessCheckModal && selectedUser && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
-            <h2>Manage Access: {selectedUser.name || selectedUser.email}</h2>
-            <div className={styles.checkboxGroup}>
-              <label className={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={viewAccess}
-                  onChange={(e) => setViewAccess(e.target.checked)}
-                />
-                View Access (Purchase Department)
-              </label>
-              <label className={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={editAccess}
-                  onChange={(e) => setEditAccess(e.target.checked)}
-                />
-                Edit Access (Purchase Department)
-              </label>
-            </div>
-            <div className={styles.modalActions}>
-              <button type="button" className={styles.secondaryButton} onClick={closeAccessCheckModal}>
-                Cancel
-              </button>
-              <button type="button" className={styles.createButton} onClick={saveAccessChanges}>
-                Save Permissions
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 };
