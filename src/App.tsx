@@ -16,13 +16,10 @@ function App() {
           <Route path="/dispatch" element={<pages.Dispatch />} />
           <Route path="/dispatch/:id" element={<pages.DispatchDetail />} />
           <Route path="/booking" element={<pages.Booking />} />
-          <Route path="/purchase-primary" element={<pages.Purchase primary />} />
-          <Route path="/purchase-primary/new" element={<pages.PurchaseNew primary />} />
           <Route path="/location" element={<pages.Location />} />
           <Route path="/store" element={<pages.Store />} />
-          <Route path="/stock" element={<pages.Stock />} />
+          <Route path="/stock/:resource?" element={<pages.Stock />} />
           <Route path="/PO/:id" element={<pages.POFormat />} />
-          <Route path="/purchase-primary/:id" element={<pages.PurchasePrimary />} />
         </Routes>
       </Router>
     </>
