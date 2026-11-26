@@ -57,6 +57,14 @@ type DispatchRecord = {
   destination?: string;
   location?: string | Location;
   accessories?: DispatchAccessory[];
+  trwrprintstatus?: string;
+  NEW2?: string;
+  REP2?: string;
+  remarks2?: string;
+  receivingcopystatus?: string;
+  purchaseorderno2?: string;
+  purchaseorderdate2?: string;
+  qty2?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -79,6 +87,14 @@ type DispatchForm = {
   partyName: string;
   destination: string;
   locationId: string;
+  trwrprintstatus: string;
+  NEW2: string;
+  REP2: string;
+  remarks2: string;
+  receivingcopystatus: string;
+  purchaseorderno2: string;
+  purchaseorderdate2: string;
+  qty2: string;
 };
 
 const emptyForm: DispatchForm = {
@@ -99,6 +115,14 @@ const emptyForm: DispatchForm = {
   partyName: '',
   destination: '',
   locationId: '',
+  trwrprintstatus: '',
+  NEW2: '',
+  REP2: '',
+  remarks2: '',
+  receivingcopystatus: '',
+  purchaseorderno2: '',
+  purchaseorderdate2: '',
+  qty2: '',
 };
 
 const getResponseData = (data: unknown): unknown => {
@@ -319,6 +343,14 @@ export default function Dispatch() {
       partyName: record.partyName || '',
       destination: record.destination || '',
       locationId: getId(record.location) || locationId,
+      trwrprintstatus: record.trwrprintstatus || '',
+      NEW2: record.NEW2 || '',
+      REP2: record.REP2 || '',
+      remarks2: record.remarks2 || '',
+      receivingcopystatus: record.receivingcopystatus || '',
+      purchaseorderno2: record.purchaseorderno2 || '',
+      purchaseorderdate2: record.purchaseorderdate2 ? record.purchaseorderdate2.slice(0, 10) : '',
+      qty2: record.qty2 === undefined ? '' : String(record.qty2),
     });
     setItems(selectedItem ? [selectedItem] : []);
     setDispatchItems((record.accessories || []).map((accessory) => ({
@@ -340,6 +372,10 @@ export default function Dispatch() {
     }
     if (form.rate !== '' && (!Number.isFinite(Number(form.rate)) || Number(form.rate) < 0)) {
       toast.error('Enter a valid non-negative rate.');
+      return;
+    }
+    if (form.qty2 !== '' && (!Number.isFinite(Number(form.qty2)) || Number(form.qty2) < 0)) {
+      toast.error('Enter a valid non-negative quantity for the additional order.');
       return;
     }
     if (dispatchItems.some((item) => !item.itemId || item.dispatched === '')) {
@@ -371,6 +407,14 @@ export default function Dispatch() {
         destination: form.destination || undefined,
         location: form.locationId,
         accessories: accessoryPayload.length ? accessoryPayload : undefined,
+        trwrprintstatus: form.trwrprintstatus || undefined,
+        NEW2: form.NEW2 || undefined,
+        REP2: form.REP2 || undefined,
+        remarks2: form.remarks2 || undefined,
+        receivingcopystatus: form.receivingcopystatus || undefined,
+        purchaseorderno2: form.purchaseorderno2 || undefined,
+        purchaseorderdate2: form.purchaseorderdate2 || undefined,
+        qty2: form.qty2 === '' ? undefined : Number(form.qty2),
       };
       if (editingRecordId) {
         await axios.put(`${import.meta.env.VITE_APP_API}/api/dispatches/${encodeURIComponent(editingRecordId)}`, payload);
@@ -480,6 +524,14 @@ export default function Dispatch() {
                 <th>Vehicle Details</th>
                 <th>Party</th>
                 <th>Destination</th>
+                <th>TRWR Print Status</th>
+                <th>NEW2</th>
+                <th>REP2</th>
+                <th>Remarks 2</th>
+                <th>Receiving Copy Status</th>
+                <th>Purchase Order No. 2</th>
+                <th>Purchase Order Date 2</th>
+                <th>Quantity 2</th>
                 <th>Location</th>
                 <th>Accessories (Item / Qty)</th>
                 <th>Created At</th>
@@ -490,9 +542,9 @@ export default function Dispatch() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={22} className={styles.emptyState}>Loading dispatches...</td></tr>
+                <tr><td colSpan={30} className={styles.emptyState}>Loading dispatches...</td></tr>
               ) : records.length === 0 ? (
-                <tr><td colSpan={22} className={styles.emptyState}>No dispatch records found.</td></tr>
+                <tr><td colSpan={30} className={styles.emptyState}>No dispatch records found.</td></tr>
               ) : records.map((record, index) => {
                 const recordId = getId(record);
                 return (
@@ -513,6 +565,14 @@ export default function Dispatch() {
                     <td>{record.vehicleDetails || '-'}</td>
                     <td>{record.partyName || '-'}</td>
                     <td>{record.destination || '-'}</td>
+                    <td>{record.trwrprintstatus || '-'}</td>
+                    <td>{record.NEW2 || '-'}</td>
+                    <td>{record.REP2 || '-'}</td>
+                    <td className={styles.descriptionCell}>{record.remarks2 || '-'}</td>
+                    <td>{record.receivingcopystatus || '-'}</td>
+                    <td>{record.purchaseorderno2 || '-'}</td>
+                    <td>{formatDate(record.purchaseorderdate2)}</td>
+                    <td>{record.qty2 ?? '-'}</td>
                     <td>{getLocationName(record.location)}</td>
                     <td className={styles.descriptionCell}>{getAccessorySummary(record.accessories)}</td>
                     <td>{formatDate(record.createdAt)}</td>
@@ -653,6 +713,30 @@ export default function Dispatch() {
                 </label>
                 <label>Destination
                   <input value={form.destination} onChange={(event) => setField('destination', event.target.value)} />
+                </label>
+                <label>TRWR print status
+                  <input value={form.trwrprintstatus} onChange={(event) => setField('trwrprintstatus', event.target.value)} />
+                </label>
+                <label>NEW2
+                  <input value={form.NEW2} onChange={(event) => setField('NEW2', event.target.value)} />
+                </label>
+                <label>REP2
+                  <input value={form.REP2} onChange={(event) => setField('REP2', event.target.value)} />
+                </label>
+                <label>Remarks 2
+                  <input value={form.remarks2} onChange={(event) => setField('remarks2', event.target.value)} />
+                </label>
+                <label>Receiving copy status
+                  <input value={form.receivingcopystatus} onChange={(event) => setField('receivingcopystatus', event.target.value)} />
+                </label>
+                <label>Purchase order number 2
+                  <input value={form.purchaseorderno2} onChange={(event) => setField('purchaseorderno2', event.target.value)} />
+                </label>
+                <label>Purchase order date 2
+                  <input type="date" value={form.purchaseorderdate2} onChange={(event) => setField('purchaseorderdate2', event.target.value)} />
+                </label>
+                <label>Quantity 2
+                  <input type="number" min="0" step="any" value={form.qty2} onChange={(event) => setField('qty2', event.target.value)} />
                 </label>
                 <section className={`${styles.fullWidth} ${styles.accessorySection}`} aria-label="Items to dispatch">
                   <div className={styles.accessoryHeader}>

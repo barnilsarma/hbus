@@ -308,6 +308,18 @@ const Purchase = ({ primary = false }: { primary?: boolean }) => {
         },
       );
 
+      if (editField === 'invoicenumber' && !primary) {
+        const baseInvoiceNumber = typeof payloadValue === 'string' ? payloadValue.trim() : '';
+        const itemIds = Array.isArray(editItem.items)
+          ? editItem.items.map((item: any) => typeof item === 'string' ? item : item?._id).filter(Boolean)
+          : [];
+        await Promise.all(itemIds.map((linkedItemId: string, index: number) =>
+          axios.put(`${import.meta.env.VITE_APP_API}/api/items/${linkedItemId}`, {
+            invoiceNumber: baseInvoiceNumber ? `${baseInvoiceNumber}-${index + 1}` : '',
+          }),
+        ));
+      }
+
       setPurchases((prev) =>
         prev.map((item) => (getEntityId(item) === itemId ? { ...item, [editField]: payloadValue } : item)),
       );

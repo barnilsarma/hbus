@@ -20,6 +20,7 @@ type Item = {
   newQty?: number | string;
   receivedqtyOriginal?: number | string;
   receivedqtyNew?: number | string;
+  invoiceNumber?: string;
   location?: string;
 };
 
@@ -41,6 +42,12 @@ const initialItemState: ItemForm = {
 };
 
 const getOrderedQty = (item: Item): number => Math.max(0, Number(item.newQty || 0));
+
+const getItemInvoiceNumber = (poInvoiceNumber: unknown, position: number): string | undefined => {
+  const baseInvoiceNumber = typeof poInvoiceNumber === 'string' ? poInvoiceNumber.trim() : '';
+  if (!baseInvoiceNumber || position < 1) return undefined;
+  return `${baseInvoiceNumber}-${position}`;
+};
 
 const BoxedText: React.FC<{ text?: string; minLength?: number }> = ({ text = '', minLength = 0 }) => {
   const chars = text.split('');
@@ -227,6 +234,18 @@ export default function POFormat() {
           });
         }
       };
+      const poInvoiceNumber = typeof poData?.invoicenumber === 'string'
+        ? poData.invoicenumber.trim()
+        : '';
+      const editingPosition = editingItemId
+        ? (poData?.items || []).findIndex((item: string | Item) =>
+          (typeof item === 'string' ? item : item._id) === editingItemId,
+        ) + 1
+        : 0;
+      const assignedPosition = editingPosition > 0
+        ? editingPosition
+        : currentItemIds.length + 1;
+      const invoiceNumber = getItemInvoiceNumber(poInvoiceNumber, assignedPosition);
       const payload = {
         type: ITEM_TYPE,
         mcode: itemForm.mcode,
@@ -235,6 +254,7 @@ export default function POFormat() {
         unit: itemForm.unit,
         rate: Number(itemForm.rate ?? 0),
         newQty: Number(itemForm.newQty ?? 0),
+        ...(invoiceNumber ? { invoiceNumber } : {}),
         location: locationId,
       };
       if (editingItemId) {
@@ -246,7 +266,12 @@ export default function POFormat() {
           throw new Error('The selected item does not have an ID.');
         }
 
-        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, payload);
+        const linkedPosition = currentItemIds.indexOf(targetId) + 1;
+        const linkedInvoiceNumber = getItemInvoiceNumber(poInvoiceNumber, linkedPosition > 0 ? linkedPosition : assignedPosition);
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${targetId}`, {
+          ...payload,
+          ...(linkedInvoiceNumber ? { invoiceNumber: linkedInvoiceNumber } : {}),
+        });
         await linkItemToPO(targetId);
         toast.success('Item linked to PO successfully.');
       } else {
@@ -283,6 +308,16 @@ export default function POFormat() {
       await axios.put(`${import.meta.env.VITE_APP_API}/api/purchases/${id}`, {
         items: updatedItemIds,
       });
+
+      const poInvoiceNumber = typeof poData?.invoicenumber === 'string'
+        ? poData.invoicenumber.trim()
+        : '';
+      await Promise.all(updatedItemIds.map(async (itId: string, index: number) => {
+        const invoiceNumber = getItemInvoiceNumber(poInvoiceNumber, index + 1);
+        await axios.put(`${import.meta.env.VITE_APP_API}/api/items/${itId}`, {
+          ...(invoiceNumber ? { invoiceNumber } : { invoiceNumber: '' }),
+        });
+      }));
 
       toast.success('Item removed from Purchase Order successfully.');
       await fetchPOData();
